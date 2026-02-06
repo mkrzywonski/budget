@@ -29,7 +29,8 @@ def create_payee(payee: PayeeCreate, db: Session = Depends(get_db)):
     """Create a new payee."""
     db_payee = Payee(
         name=payee.name,
-        match_patterns=[p.model_dump() for p in payee.match_patterns]
+        match_patterns=[p.model_dump() for p in payee.match_patterns],
+        default_category_id=payee.default_category_id
     )
     db.add(db_payee)
     db.flush()

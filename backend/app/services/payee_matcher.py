@@ -62,11 +62,11 @@ def apply_payee_match(db: Session, transaction: Transaction) -> None:
     payee rules and set display_name.
     """
     if not transaction.payee_raw:
+        transaction.display_name = None
         return
 
     name = match_payee(db, transaction.payee_raw)
-    if name:
-        transaction.display_name = name
+    transaction.display_name = name
 
 
 def rematch_all(db: Session) -> int:

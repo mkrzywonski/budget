@@ -151,6 +151,9 @@ def update_transaction(
     for field, value in update_data.items():
         setattr(db_transaction, field, value)
 
+    if "payee_raw" in update_data and "display_name" not in update_data:
+        apply_payee_match(db, db_transaction)
+
     db.flush()
     db.refresh(db_transaction)
     return db_transaction
