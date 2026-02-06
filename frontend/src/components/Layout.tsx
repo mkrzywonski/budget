@@ -75,6 +75,16 @@ export default function Layout({ bookName, children }: LayoutProps) {
               >
                 Payees
               </Link>
+              <Link
+                to="/categories"
+                className={`block px-3 py-2 rounded ${
+                  location.pathname === '/categories'
+                    ? 'bg-gray-700 text-white'
+                    : 'text-gray-300 hover:bg-gray-700'
+                }`}
+              >
+                Categories
+              </Link>
             </div>
           </div>
         </nav>

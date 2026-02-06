@@ -95,6 +95,7 @@ export interface Payee {
   id: number
   name: string
   match_patterns: MatchPattern[]
+  default_category_id: number | null
   created_at: string
   updated_at: string
 }

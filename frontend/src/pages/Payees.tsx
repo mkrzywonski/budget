@@ -10,6 +10,7 @@ import {
   usePreviewPayeeMatches
 } from '../hooks/usePayees'
 import { Payee, MatchPattern } from '../api/client'
+import { useCategories } from '../hooks/useCategories'
 
 const MATCH_TYPES = [
   { value: 'starts_with', label: 'Starts with' },
@@ -29,6 +30,7 @@ export default function Payees() {
   const deleteMutation = useDeletePayee()
   const rematchMutation = useRematchPayees()
   const rematchPayeeMutation = useRematchPayee()
+  const { data: categories } = useCategories()
 
   const [showAdd, setShowAdd] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -86,8 +88,13 @@ export default function Payees() {
           <div className="space-y-3">
             {showAdd && (
               <PayeeForm
-                onSave={async (name, patterns) => {
-                  await createMutation.mutateAsync({ name, match_patterns: patterns })
+                categories={categories || []}
+                onSave={async (name, patterns, defaultCategoryId) => {
+                  await createMutation.mutateAsync({
+                    name,
+                    match_patterns: patterns,
+                    default_category_id: defaultCategoryId
+                  })
                   setShowAdd(false)
                 }}
                 onCancel={() => setShowAdd(false)}
@@ -106,11 +113,13 @@ export default function Payees() {
                 <PayeeForm
                   key={payee.id}
                   payee={payee}
-                  onSave={async (name, patterns) => {
+                  categories={categories || []}
+                  onSave={async (name, patterns, defaultCategoryId) => {
                     const updated = await updateMutation.mutateAsync({
                       id: payee.id,
                       name,
-                      match_patterns: patterns
+                      match_patterns: patterns,
+                      default_category_id: defaultCategoryId
                     })
                     await rematchPayeeMutation.mutateAsync(updated.id)
                     setEditingId(null)
@@ -122,6 +131,7 @@ export default function Payees() {
                 <PayeeCard
                   key={payee.id}
                   payee={payee}
+                  categories={categories || []}
                   onEdit={() => setEditingId(payee.id)}
                   onDelete={() => deleteMutation.mutate(payee.id)}
                 />
@@ -138,18 +148,27 @@ export default function Payees() {
 
 function PayeeCard({
   payee,
+  categories,
   onEdit,
   onDelete
 }: {
   payee: Payee
+  categories: { id: number; name: string }[]
   onEdit: () => void
   onDelete: () => void
 }) {
+  const categoryName =
+    categories.find((category) => category.id === payee.default_category_id)?.name ||
+    '—'
+
   return (
     <div className="bg-white border rounded-lg p-4 group">
       <div className="flex justify-between items-start">
         <div>
           <h3 className="font-medium text-lg">{payee.name}</h3>
+          <div className="mt-1 text-sm text-gray-500">
+            Default category: {categoryName}
+          </div>
           <div className="mt-2 flex flex-wrap gap-2">
             {payee.match_patterns.map((p, i) => (
               <span
@@ -194,16 +213,21 @@ function PayeeCard({
 
 function PayeeForm({
   payee,
+  categories,
   onSave,
   onCancel,
   isSaving
 }: {
   payee?: Payee
-  onSave: (name: string, patterns: MatchPattern[]) => Promise<void>
+  categories: { id: number; name: string }[]
+  onSave: (name: string, patterns: MatchPattern[], defaultCategoryId: number | null) => Promise<void>
   onCancel: () => void
   isSaving: boolean
 }) {
   const [name, setName] = useState(payee?.name || '')
+  const [defaultCategoryId, setDefaultCategoryId] = useState<number | null>(
+    payee?.default_category_id ?? null
+  )
   const [patterns, setPatterns] = useState<MatchPattern[]>(
     payee?.match_patterns?.length ? payee.match_patterns : [{ ...EMPTY_PATTERN }]
   )
@@ -258,7 +282,7 @@ function PayeeForm({
     if (!name.trim()) return
     const validPatterns = patterns.filter((p) => p.pattern.trim())
     if (validPatterns.length === 0) return
-    onSave(name.trim(), validPatterns)
+    onSave(name.trim(), validPatterns, defaultCategoryId)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -337,6 +361,27 @@ function PayeeForm({
           >
             + Add another pattern
           </button>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Default Category
+          </label>
+          <select
+            value={defaultCategoryId ?? ''}
+            onChange={(e) => {
+              const value = e.target.value
+              setDefaultCategoryId(value ? Number(value) : null)
+            }}
+            className="w-full px-3 py-2 border border-gray-300 rounded"
+          >
+            <option value="">None</option>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="border-t pt-3">

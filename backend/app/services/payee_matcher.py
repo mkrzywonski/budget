@@ -37,6 +37,27 @@ def match_payee(db: Session, payee_raw: str) -> str | None:
     return None
 
 
+def match_payee_record(db: Session, payee_raw: str) -> Payee | None:
+    """Return the matched Payee record, or None if no match."""
+    if not payee_raw:
+        return None
+
+    payees = db.query(Payee).all()
+    raw_lower = payee_raw.lower()
+
+    for payee in payees:
+        for rule in payee.match_patterns or []:
+            match_type = rule.get("type", "contains")
+            pattern = rule.get("pattern", "")
+            if not pattern:
+                continue
+
+            if _matches(raw_lower, pattern, match_type):
+                return payee
+
+    return None
+
+
 def _matches(raw_lower: str, pattern: str, match_type: str) -> bool:
     """Check if a single pattern matches."""
     pattern_lower = pattern.lower()
@@ -85,8 +106,13 @@ def apply_payee_match(db: Session, transaction: Transaction) -> None:
         transaction.display_name = None
         return
 
-    name = match_payee(db, transaction.payee_raw)
-    transaction.display_name = name
+    matched_payee = match_payee_record(db, transaction.payee_raw)
+    if matched_payee:
+        transaction.display_name = matched_payee.name
+        if matched_payee.default_category_id is not None:
+            transaction.category_id = matched_payee.default_category_id
+    else:
+        transaction.display_name = None
 
 
 def rematch_all(db: Session) -> int:
@@ -112,14 +138,18 @@ def rematch_all(db: Session) -> int:
     for tx in transactions:
         old_name = tx.display_name
         new_name = None
+        new_category_id = tx.category_id
 
         for payee in payees:
             if matches_payee(payee, tx.payee_raw):
                 new_name = payee.name
+                if payee.default_category_id is not None:
+                    new_category_id = payee.default_category_id
                 break
 
-        if new_name != old_name:
+        if new_name != old_name or new_category_id != tx.category_id:
             tx.display_name = new_name
+            tx.category_id = new_category_id
             updated += 1
 
     return updated
@@ -140,9 +170,15 @@ def rematch_payee(db: Session, payee: Payee) -> int:
     updated = 0
     for tx in transactions:
         should_match = matches_payee(payee, tx.payee_raw)
-        if should_match and tx.display_name != payee.name:
-            tx.display_name = payee.name
-            updated += 1
+        if should_match:
+            needs_update = tx.display_name != payee.name
+            if payee.default_category_id is not None and tx.category_id != payee.default_category_id:
+                needs_update = True
+            if needs_update:
+                tx.display_name = payee.name
+                if payee.default_category_id is not None:
+                    tx.category_id = payee.default_category_id
+                updated += 1
         elif not should_match and tx.display_name == payee.name:
             tx.display_name = None
             updated += 1

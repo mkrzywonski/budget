@@ -1,0 +1,57 @@
+
+==================================================
+  Personal Finance Ledger
+==================================================
+
+  URL: http://127.0.0.1:8000
+
+█▀▀▀▀▀▀▀████▀▀███▀█▀▀▀▀▀▀▀█
+█ █▀▀▀█ ██▄▄█▀█████ █▀▀▀█ █
+█ █   █ █ ▀██▄▄ ▄██ █   █ █
+█ ▀▀▀▀▀ █▀█▀▄ █▀█ █ ▀▀▀▀▀ █
+█▀▀███▀▀▀█▀▄ █▀█▀▀███▀▀████
+█▀█▀▀ █▀█▄▄▀█▄██ ▄ ▀█  ▄ ▀█
+█▀▄ █  ▀▄  █▀ █▀▄  ▀██▄██ █
+█ █▀▄█▀▀██▄▀▀▀█▄ █▀█▀█▀█ ▀█
+█ █ ▀ ▄▀▀ ▄▄ ██▄▀ ▀▀▀ █ █▄█
+█▀▀▀▀▀▀▀█ ▄█▀▄▄█▄ █▀█ ▀▄█▀█
+█ █▀▀▀█ █▄▀ █ ▄▀▀ ▀▀▀ ▀▀  █
+█ █   █ ██ █▀▀█▄█▀▀▄▄█▄▀▄ █
+█ ▀▀▀▀▀ █  █▄█▀ ▀ ▀ ▄▄▀██ █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+INFO:     Will watch for changes in these directories: ['/home/mike/budget/backend']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [297467] using WatchFiles
+
+  Press Ctrl+C to stop the server
+
+==================================================
+
+INFO:     Started server process [297469]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:42850 - "POST /api/books/open HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42850 - "GET /api/books/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42850 - "GET /api/accounts/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42850 - "GET /api/accounts/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42858 - "GET /api/payees/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42854 - "GET /api/transactions/?account_id=1&year=2026&month=2 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42854 - "GET /api/categories/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42854 - "POST /api/payees/preview-matches HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42854 - "POST /api/payees/preview-matches HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42854 - "PATCH /api/payees/3 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42854 - "POST /api/payees/3/rematch HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51582 - "GET /api/payees/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42854 - "GET /api/payees/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42854 - "GET /api/transactions/?account_id=1&year=2026&month=2 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56100 - "POST /api/transactions/ HTTP/1.1" 201 Created
+INFO:     127.0.0.1:56100 - "GET /api/transactions/?account_id=1&year=2026&month=2 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48162 - "GET /api/categories/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48162 - "GET /api/payees/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48170 - "POST /api/payees/preview-matches HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42880 - "POST /api/payees/preview-matches HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [297469]
+INFO:     Stopping reloader process [297467]

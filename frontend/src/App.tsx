@@ -4,6 +4,7 @@ import BookPicker from './pages/BookPicker'
 import Dashboard from './pages/Dashboard'
 import Ledger from './pages/Ledger'
 import Payees from './pages/Payees'
+import Categories from './pages/Categories'
 import Layout from './components/Layout'
 
 function App() {
@@ -28,6 +29,7 @@ function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/accounts/:accountId" element={<Ledger />} />
         <Route path="/payees" element={<Payees />} />
+        <Route path="/categories" element={<Categories />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

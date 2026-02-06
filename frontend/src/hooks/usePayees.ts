@@ -12,7 +12,11 @@ export function useCreatePayee() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (data: { name: string; match_patterns: MatchPattern[] }) =>
+    mutationFn: (data: {
+      name: string
+      match_patterns: MatchPattern[]
+      default_category_id?: number | null
+    }) =>
       api.post<Payee>('/payees/', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payees'] })
@@ -31,6 +35,7 @@ export function useUpdatePayee() {
       id: number
       name?: string
       match_patterns?: MatchPattern[]
+      default_category_id?: number | null
     }) => api.patch<Payee>(`/payees/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payees'] })
