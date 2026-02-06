@@ -63,7 +63,8 @@ def preview_csv_import(
         amount_config=amount_config,
         date_format=request.date_format,
         delimiter=request.delimiter,
-        skip_rows=request.skip_rows
+        skip_rows=request.skip_rows,
+        has_header=request.has_header
     )
 
     # First pass: just get headers
@@ -75,13 +76,19 @@ def preview_csv_import(
         raise HTTPException(status_code=400, detail="Empty CSV file")
 
     import csv
-    headers = next(csv.reader([lines[0]], delimiter=request.delimiter))
+    if request.has_header:
+        headers = next(csv.reader([lines[0]], delimiter=request.delimiter))
+    else:
+        num_cols = len(next(csv.reader([lines[0]], delimiter=request.delimiter)))
+        headers = [f"Column {i + 1}" for i in range(num_cols)]
     header_signature = parser._compute_header_signature(headers)
 
-    # Check for matching profile
-    matched_profile = import_service.find_matching_profile(
-        request.account_id, header_signature
-    )
+    # Check for matching profile (only when headers are present)
+    matched_profile = None
+    if request.has_header:
+        matched_profile = import_service.find_matching_profile(
+            request.account_id, header_signature
+        )
 
     # If we have a profile and no explicit mappings, use profile settings
     detected_mappings = None
@@ -93,35 +100,38 @@ def preview_csv_import(
             amount_config=amount_config,
             date_format=matched_profile.date_format,
             delimiter=matched_profile.delimiter,
-            skip_rows=matched_profile.skip_rows
+            skip_rows=matched_profile.skip_rows,
+            has_header=request.has_header
         )
     elif not request.column_mappings:
-        # Auto-detect columns
-        detected, debit_col, credit_col = detect_columns(headers)
-        column_mappings = detected
+        if request.has_header:
+            # Auto-detect columns from header names
+            detected, debit_col, credit_col = detect_columns(headers)
+            column_mappings = detected
 
-        if debit_col is not None and credit_col is not None:
-            amount_config = {
-                "type": "split",
-                "debit_column": debit_col,
-                "credit_column": credit_col
-            }
-        elif "amount" in detected:
-            amount_config = {"type": "single", "column": detected["amount"]}
+            if debit_col is not None and credit_col is not None:
+                amount_config = {
+                    "type": "split",
+                    "debit_column": debit_col,
+                    "credit_column": credit_col
+                }
+            elif "amount" in detected:
+                amount_config = {"type": "single", "column": detected["amount"]}
 
-        detected_mappings = ColumnMappings(
-            date=detected.get("date", 0),
-            amount=detected.get("amount"),
-            payee=detected.get("payee"),
-            memo=detected.get("memo")
-        )
+            detected_mappings = ColumnMappings(
+                date=detected.get("date", 0),
+                amount=detected.get("amount"),
+                payee=detected.get("payee"),
+                memo=detected.get("memo")
+            )
 
         parser = CSVParser(
             column_mappings=column_mappings,
             amount_config=amount_config,
             date_format=request.date_format,
             delimiter=request.delimiter,
-            skip_rows=request.skip_rows
+            skip_rows=request.skip_rows,
+            has_header=request.has_header
         )
 
     # Parse the full file
@@ -245,7 +255,7 @@ def create_import_profile(
     if request.column_mappings.memo is not None:
         column_mappings["memo"] = request.column_mappings.memo
 
-    profile = import_service.create_profile(
+    profile = import_service.upsert_profile(
         account_id=request.account_id,
         name=request.name,
         headers=request.headers,
@@ -254,7 +264,8 @@ def create_import_profile(
         amount_config=request.amount_config.model_dump(),
         date_format=request.date_format,
         delimiter=request.delimiter,
-        skip_rows=request.skip_rows
+        skip_rows=request.skip_rows,
+        has_header=request.has_header
     )
 
     return profile

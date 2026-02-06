@@ -199,7 +199,7 @@ class ImportService:
             )
         ).first()
 
-    def create_profile(
+    def upsert_profile(
         self,
         account_id: int,
         name: str,
@@ -209,20 +209,37 @@ class ImportService:
         amount_config: dict,
         date_format: str | None = None,
         delimiter: str = ",",
-        skip_rows: int = 0
+        skip_rows: int = 0,
+        has_header: bool = True
     ) -> ImportProfile:
-        """Create a new import profile."""
-        profile = ImportProfile(
-            account_id=account_id,
-            name=name,
-            header_signature=headers,  # Store full headers for reference
-            column_mappings=column_mappings,
-            amount_config=amount_config,
-            date_format=date_format,
-            delimiter=delimiter,
-            skip_rows=skip_rows
-        )
-        self.db.add(profile)
+        """Create or update the import profile for an account (one per account)."""
+        profile = self.db.query(ImportProfile).filter(
+            ImportProfile.account_id == account_id
+        ).first()
+
+        if profile:
+            profile.name = name
+            profile.header_signature = headers
+            profile.column_mappings = column_mappings
+            profile.amount_config = amount_config
+            profile.date_format = date_format
+            profile.delimiter = delimiter
+            profile.skip_rows = skip_rows
+            profile.has_header = has_header
+        else:
+            profile = ImportProfile(
+                account_id=account_id,
+                name=name,
+                header_signature=headers,
+                column_mappings=column_mappings,
+                amount_config=amount_config,
+                date_format=date_format,
+                delimiter=delimiter,
+                skip_rows=skip_rows,
+                has_header=has_header
+            )
+            self.db.add(profile)
+
         self.db.flush()
         self.db.refresh(profile)
         return profile

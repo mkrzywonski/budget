@@ -73,7 +73,8 @@ class CSVParser:
         amount_config: dict | None = None,
         date_format: str | None = None,
         delimiter: str = ",",
-        skip_rows: int = 0
+        skip_rows: int = 0,
+        has_header: bool = True
     ):
         """
         Initialize parser with configuration.
@@ -87,12 +88,14 @@ class CSVParser:
             date_format: strptime format string, or None for auto-detect
             delimiter: CSV delimiter character
             skip_rows: Number of rows to skip before headers
+            has_header: Whether the first row (after skip_rows) is a header row
         """
         self.column_mappings = column_mappings or {}
         self.amount_config = amount_config or {"type": "single", "column": 1}
         self.date_format = date_format
         self.delimiter = delimiter
         self.skip_rows = skip_rows
+        self.has_header = has_header
 
         self._detected_date_format: str | None = None
 
@@ -125,9 +128,14 @@ class CSVParser:
                 errors=["No data rows found"]
             )
 
-        headers = rows[0]
+        if self.has_header:
+            headers = rows[0]
+            data_rows = rows[1:]
+        else:
+            num_cols = len(rows[0])
+            headers = [f"Column {i + 1}" for i in range(num_cols)]
+            data_rows = rows
         header_signature = self._compute_header_signature(headers)
-        data_rows = rows[1:]
 
         transactions: list[ParsedTransaction] = []
         errors: list[str] = []
@@ -332,7 +340,8 @@ def parse_csv_file(
     amount_config: dict | None = None,
     date_format: str | None = None,
     delimiter: str = ",",
-    skip_rows: int = 0
+    skip_rows: int = 0,
+    has_header: bool = True
 ) -> CSVParseResult:
     """
     Convenience function to parse a CSV file.
@@ -342,7 +351,8 @@ def parse_csv_file(
         amount_config=amount_config,
         date_format=date_format,
         delimiter=delimiter,
-        skip_rows=skip_rows
+        skip_rows=skip_rows,
+        has_header=has_header
     )
     return parser.parse(content)
 

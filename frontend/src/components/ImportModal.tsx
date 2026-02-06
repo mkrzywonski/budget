@@ -4,12 +4,11 @@ import clsx from 'clsx'
 import {
   usePreviewCSV,
   useCommitImport,
-  useCreateProfile,
+  useSaveProfile,
   useImportProfiles,
   CSVPreviewResponse,
   ColumnMappings,
   AmountConfig,
-  ImportProfile
 } from '../hooks/useImport'
 import { formatCurrency } from '../utils/format'
 
@@ -33,6 +32,7 @@ export default function ImportModal({
   const [fileName, setFileName] = useState('')
   const [delimiter, setDelimiter] = useState(',')
   const [skipRows, setSkipRows] = useState(0)
+  const [hasHeader, setHasHeader] = useState(true)
 
   const [preview, setPreview] = useState<CSVPreviewResponse | null>(null)
   const [mappings, setMappings] = useState<ColumnMappings>({ date: 0 })
@@ -43,24 +43,25 @@ export default function ImportModal({
   })
 
   const [acceptedDuplicates, setAcceptedDuplicates] = useState<Set<number>>(new Set())
-  const [saveProfile, setSaveProfile] = useState(false)
-  const [profileName, setProfileName] = useState('')
-
-  const [selectedProfileId, setSelectedProfileId] = useState<number | null>(null)
+  const [saveSettings, setSaveSettings] = useState(false)
+  const [useSavedSettings, setUseSavedSettings] = useState(false)
 
   const { data: profiles } = useImportProfiles(accountId)
+  const savedProfile = profiles?.[0] ?? null
   const previewMutation = usePreviewCSV()
   const commitMutation = useCommitImport()
-  const createProfileMutation = useCreateProfile()
+  const saveProfileMutation = useSaveProfile()
 
-  const handleProfileSelect = (profileId: number | null) => {
-    setSelectedProfileId(profileId)
-    if (profileId && profiles) {
-      const profile = profiles.find(p => p.id === profileId)
-      if (profile) {
-        setDelimiter(profile.delimiter || ',')
-        setSkipRows(profile.skip_rows || 0)
-      }
+  const handleUseSavedSettings = (use: boolean) => {
+    setUseSavedSettings(use)
+    if (use && savedProfile) {
+      setDelimiter(savedProfile.delimiter || ',')
+      setSkipRows(savedProfile.skip_rows || 0)
+      setHasHeader(savedProfile.has_header)
+    } else {
+      setDelimiter(',')
+      setSkipRows(0)
+      setHasHeader(true)
     }
   }
 
@@ -79,19 +80,18 @@ export default function ImportModal({
   const handlePreview = async () => {
     if (!fileContent) return
 
-    const selectedProfile = selectedProfileId
-      ? profiles?.find(p => p.id === selectedProfileId)
-      : null
+    const useProfile = useSavedSettings && savedProfile
 
     const result = await previewMutation.mutateAsync({
       content: fileContent,
       account_id: accountId,
       delimiter,
       skip_rows: skipRows,
-      ...(selectedProfile && {
-        column_mappings: selectedProfile.column_mappings as unknown as ColumnMappings,
-        amount_config: selectedProfile.amount_config,
-        ...(selectedProfile.date_format && { date_format: selectedProfile.date_format }),
+      has_header: hasHeader,
+      ...(useProfile && {
+        column_mappings: savedProfile!.column_mappings as unknown as ColumnMappings,
+        amount_config: savedProfile!.amount_config,
+        ...(savedProfile!.date_format && { date_format: savedProfile!.date_format }),
       }),
     })
 
@@ -109,12 +109,51 @@ export default function ImportModal({
       }
     }
 
-    // If profile matched (auto or manual), skip to preview
-    if (result.matched_profile_id || selectedProfile) {
+    // If using saved settings or auto-matched, skip to preview
+    if (result.matched_profile_id || useProfile) {
       setStep('preview')
     } else {
       setStep('mapping')
     }
+  }
+
+  const reParse = async (newDelimiter: string, newSkipRows: number, newHasHeader: boolean) => {
+    if (!fileContent) return
+
+    const result = await previewMutation.mutateAsync({
+      content: fileContent,
+      account_id: accountId,
+      delimiter: newDelimiter,
+      skip_rows: newSkipRows,
+      has_header: newHasHeader,
+    })
+
+    setPreview(result)
+    if (result.detected_mappings) {
+      setMappings(result.detected_mappings)
+      if (result.detected_mappings.amount !== undefined) {
+        setAmountConfig({
+          type: 'single',
+          column: result.detected_mappings.amount,
+          negate: false
+        })
+      }
+    }
+  }
+
+  const handleDelimiterChange = (v: string) => {
+    setDelimiter(v)
+    reParse(v, skipRows, hasHeader)
+  }
+
+  const handleSkipRowsChange = (v: number) => {
+    setSkipRows(v)
+    reParse(delimiter, v, hasHeader)
+  }
+
+  const handleHasHeaderChange = (v: boolean) => {
+    setHasHeader(v)
+    reParse(delimiter, skipRows, v)
   }
 
   const handleApplyMappings = async () => {
@@ -125,6 +164,7 @@ export default function ImportModal({
       account_id: accountId,
       delimiter,
       skip_rows: skipRows,
+      has_header: hasHeader,
       column_mappings: mappings,
       amount_config: amountConfig
     })
@@ -173,16 +213,16 @@ export default function ImportModal({
       accepted_duplicate_indices: Array.from(acceptedDuplicates)
     })
 
-    // Save profile if requested
-    if (saveProfile && profileName && preview.headers) {
-      await createProfileMutation.mutateAsync({
+    // Save import settings if requested
+    if (saveSettings && preview.headers) {
+      await saveProfileMutation.mutateAsync({
         account_id: accountId,
-        name: profileName,
         headers: preview.headers,
         column_mappings: mappings,
         amount_config: amountConfig,
         delimiter,
-        skip_rows: skipRows
+        skip_rows: skipRows,
+        has_header: hasHeader
       })
     }
 
@@ -216,14 +256,10 @@ export default function ImportModal({
           {step === 'upload' && (
             <UploadStep
               fileName={fileName}
-              delimiter={delimiter}
-              skipRows={skipRows}
               onFileSelect={handleFileSelect}
-              onDelimiterChange={setDelimiter}
-              onSkipRowsChange={setSkipRows}
-              profiles={profiles || []}
-              selectedProfileId={selectedProfileId}
-              onProfileSelect={handleProfileSelect}
+              hasSavedSettings={!!savedProfile}
+              useSavedSettings={useSavedSettings}
+              onUseSavedSettingsChange={handleUseSavedSettings}
             />
           )}
 
@@ -234,6 +270,14 @@ export default function ImportModal({
               amountConfig={amountConfig}
               onMappingsChange={setMappings}
               onAmountConfigChange={setAmountConfig}
+              delimiter={delimiter}
+              skipRows={skipRows}
+              onDelimiterChange={handleDelimiterChange}
+              onSkipRowsChange={handleSkipRowsChange}
+              isParsing={previewMutation.isPending}
+              rawPreviewLines={fileContent.split('\n').slice(0, 10)}
+              hasHeader={hasHeader}
+              onHasHeaderChange={handleHasHeaderChange}
             />
           )}
 
@@ -244,11 +288,9 @@ export default function ImportModal({
               onToggleDuplicate={handleToggleDuplicate}
               onAcceptAll={handleAcceptAllDuplicates}
               onRejectAll={handleRejectAllDuplicates}
-              saveProfile={saveProfile}
-              profileName={profileName}
-              onSaveProfileChange={setSaveProfile}
-              onProfileNameChange={setProfileName}
-              showSaveProfile={!preview.matched_profile_id}
+              saveSettings={saveSettings}
+              onSaveSettingsChange={setSaveSettings}
+              showSaveSettings={!useSavedSettings}
             />
           )}
 
@@ -316,24 +358,16 @@ export default function ImportModal({
 
 function UploadStep({
   fileName,
-  delimiter,
-  skipRows,
   onFileSelect,
-  onDelimiterChange,
-  onSkipRowsChange,
-  profiles,
-  selectedProfileId,
-  onProfileSelect
+  hasSavedSettings,
+  useSavedSettings,
+  onUseSavedSettingsChange
 }: {
   fileName: string
-  delimiter: string
-  skipRows: number
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void
-  onDelimiterChange: (v: string) => void
-  onSkipRowsChange: (v: number) => void
-  profiles: ImportProfile[]
-  selectedProfileId: number | null
-  onProfileSelect: (id: number | null) => void
+  hasSavedSettings: boolean
+  useSavedSettings: boolean
+  onUseSavedSettingsChange: (v: boolean) => void
 }) {
   return (
     <div className="space-y-6">
@@ -358,26 +392,66 @@ function UploadStep({
         </div>
       </div>
 
-      {profiles.length > 0 && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Import Profile
-          </label>
-          <select
-            value={selectedProfileId ?? ''}
-            onChange={(e) => onProfileSelect(e.target.value ? Number(e.target.value) : null)}
-            className="w-full px-3 py-2 border border-gray-300 rounded"
-          >
-            <option value="">Auto-detect</option>
-            {profiles.map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-          <p className="text-xs text-gray-500 mt-1">
-            Select a saved profile to apply its column mappings and settings.
-          </p>
-        </div>
+      {hasSavedSettings && (
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={useSavedSettings}
+            onChange={(e) => onUseSavedSettingsChange(e.target.checked)}
+            className="rounded"
+          />
+          <span className="text-sm text-gray-700">Use saved import settings</span>
+        </label>
       )}
+    </div>
+  )
+}
+
+function MappingStep({
+  headers,
+  mappings,
+  amountConfig,
+  onMappingsChange,
+  onAmountConfigChange,
+  delimiter,
+  skipRows,
+  onDelimiterChange,
+  onSkipRowsChange,
+  isParsing,
+  rawPreviewLines,
+  hasHeader,
+  onHasHeaderChange
+}: {
+  headers: string[]
+  mappings: ColumnMappings
+  amountConfig: AmountConfig
+  onMappingsChange: (m: ColumnMappings) => void
+  onAmountConfigChange: (c: AmountConfig) => void
+  delimiter: string
+  skipRows: number
+  onDelimiterChange: (v: string) => void
+  onSkipRowsChange: (v: number) => void
+  isParsing: boolean
+  rawPreviewLines: string[]
+  hasHeader: boolean
+  onHasHeaderChange: (v: boolean) => void
+}) {
+  const columnOptions = headers.map((h, i) => (
+    <option key={i} value={i}>{h}</option>
+  ))
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">File Preview</label>
+        <pre className="bg-gray-50 border border-gray-200 rounded p-3 text-xs font-mono overflow-x-auto max-h-40 leading-relaxed">
+          {rawPreviewLines.map((line, i) => (
+            <div key={i} className={clsx(i < skipRows && 'text-gray-400 line-through')}>
+              <span className="text-gray-400 select-none mr-3">{i + 1}</span>{line}
+            </div>
+          ))}
+        </pre>
+      </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
@@ -407,30 +481,23 @@ function UploadStep({
           />
         </div>
       </div>
-    </div>
-  )
-}
 
-function MappingStep({
-  headers,
-  mappings,
-  amountConfig,
-  onMappingsChange,
-  onAmountConfigChange
-}: {
-  headers: string[]
-  mappings: ColumnMappings
-  amountConfig: AmountConfig
-  onMappingsChange: (m: ColumnMappings) => void
-  onAmountConfigChange: (c: AmountConfig) => void
-}) {
-  const columnOptions = headers.map((h, i) => (
-    <option key={i} value={i}>{h}</option>
-  ))
+      <label className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={hasHeader}
+          onChange={(e) => onHasHeaderChange(e.target.checked)}
+          className="rounded"
+        />
+        <span className="text-sm text-gray-700">First row is a header</span>
+      </label>
 
-  return (
-    <div className="space-y-6">
-      <p className="text-sm text-gray-600">
+      {isParsing && (
+        <p className="text-sm text-gray-500">Re-detecting columns...</p>
+      )}
+
+      <div className="border-t pt-4">
+      <p className="text-sm text-gray-600 mb-4">
         Map columns from your CSV file to transaction fields.
       </p>
 
@@ -481,6 +548,7 @@ function MappingStep({
             {columnOptions}
           </select>
         </div>
+      </div>
       </div>
 
       <div className="border-t pt-4">
@@ -582,22 +650,18 @@ function PreviewStep({
   onToggleDuplicate,
   onAcceptAll,
   onRejectAll,
-  saveProfile,
-  profileName,
-  onSaveProfileChange,
-  onProfileNameChange,
-  showSaveProfile
+  saveSettings,
+  onSaveSettingsChange,
+  showSaveSettings
 }: {
   preview: CSVPreviewResponse
   acceptedDuplicates: Set<number>
   onToggleDuplicate: (idx: number) => void
   onAcceptAll: () => void
   onRejectAll: () => void
-  saveProfile: boolean
-  profileName: string
-  onSaveProfileChange: (v: boolean) => void
-  onProfileNameChange: (v: string) => void
-  showSaveProfile: boolean
+  saveSettings: boolean
+  onSaveSettingsChange: (v: boolean) => void
+  showSaveSettings: boolean
 }) {
   return (
     <div className="space-y-6">
@@ -618,9 +682,9 @@ function PreviewStep({
         )}
       </div>
 
-      {preview.matched_profile_name && (
+      {preview.matched_profile_id && (
         <div className="bg-blue-50 text-blue-700 px-3 py-2 rounded text-sm">
-          Using saved profile: {preview.matched_profile_name}
+          Using saved import settings
         </div>
       )}
 
@@ -727,29 +791,20 @@ function PreviewStep({
         </div>
       </div>
 
-      {/* Save profile option */}
-      {showSaveProfile && (
+      {/* Save settings option */}
+      {showSaveSettings && (
         <div className="border-t pt-4">
           <label className="flex items-center gap-2">
             <input
               type="checkbox"
-              checked={saveProfile}
-              onChange={(e) => onSaveProfileChange(e.target.checked)}
+              checked={saveSettings}
+              onChange={(e) => onSaveSettingsChange(e.target.checked)}
               className="rounded"
             />
             <span className="text-sm text-gray-700">
-              Save these settings as an import profile
+              Save these import settings for next time
             </span>
           </label>
-          {saveProfile && (
-            <input
-              type="text"
-              value={profileName}
-              onChange={(e) => onProfileNameChange(e.target.value)}
-              placeholder="Profile name (e.g., Chase Checking)"
-              className="mt-2 w-full px-3 py-2 border border-gray-300 rounded"
-            />
-          )}
         </div>
       )}
 

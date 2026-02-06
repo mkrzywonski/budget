@@ -25,6 +25,7 @@ class CSVUploadRequest(BaseModel):
     account_id: int
     delimiter: str = ","
     skip_rows: int = 0
+    has_header: bool = True
     # Optional: override auto-detection
     column_mappings: ColumnMappings | None = None
     amount_config: AmountConfig | None = None
@@ -120,18 +121,20 @@ class ImportProfileResponse(BaseModel):
     date_format: str | None
     delimiter: str
     skip_rows: int
+    has_header: bool
 
     class Config:
         from_attributes = True
 
 
 class CreateProfileRequest(BaseModel):
-    """Request to create an import profile."""
+    """Request to create/update the import profile for an account."""
     account_id: int
-    name: str
+    name: str = "Import Settings"
     headers: list[str]
     column_mappings: ColumnMappings
     amount_config: AmountConfig
     date_format: str | None = None
     delimiter: str = ","
     skip_rows: int = 0
+    has_header: bool = True

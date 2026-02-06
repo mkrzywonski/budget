@@ -76,6 +76,7 @@ export interface ImportProfile {
   date_format: string | null
   delimiter: string
   skip_rows: number
+  has_header: boolean
 }
 
 export function usePreviewCSV() {
@@ -85,6 +86,7 @@ export function usePreviewCSV() {
       account_id: number
       delimiter?: string
       skip_rows?: number
+      has_header?: boolean
       column_mappings?: ColumnMappings
       amount_config?: AmountConfig
       date_format?: string
@@ -116,19 +118,19 @@ export function useImportProfiles(accountId: number) {
   })
 }
 
-export function useCreateProfile() {
+export function useSaveProfile() {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: (data: {
       account_id: number
-      name: string
       headers: string[]
       column_mappings: ColumnMappings
       amount_config: AmountConfig
       date_format?: string
       delimiter?: string
       skip_rows?: number
+      has_header?: boolean
     }) => api.post<ImportProfile>('/import/profiles', data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['importProfiles', variables.account_id] })
