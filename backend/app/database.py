@@ -1,5 +1,5 @@
 from pathlib import Path
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text, inspect
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.engine import Engine
 
@@ -35,6 +35,31 @@ def open_book(db_path: Path) -> None:
 
     # Create tables if they don't exist
     Base.metadata.create_all(_current_engine)
+
+    # Migrate existing tables: add missing columns
+    _migrate_schema(_current_engine)
+
+
+def _migrate_schema(engine: Engine) -> None:
+    """Add any missing columns to existing tables."""
+    inspector = inspect(engine)
+
+    # Define expected columns that may be missing from older databases
+    # Format: (table_name, column_name, column_type_sql)
+    migrations = [
+        ("transactions", "display_name", "VARCHAR(255)"),
+    ]
+
+    with engine.connect() as conn:
+        for table, column, col_type in migrations:
+            if not inspector.has_table(table):
+                continue
+            existing = [c["name"] for c in inspector.get_columns(table)]
+            if column not in existing:
+                conn.execute(text(
+                    f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"
+                ))
+                conn.commit()
 
 
 def close_book() -> None:

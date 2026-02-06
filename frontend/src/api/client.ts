@@ -64,6 +64,7 @@ export interface Transaction {
   amount: number
   payee_raw: string | null
   payee_normalized: string | null
+  display_name: string | null
   memo: string | null
   notes: string | null
   category_id: number | null
@@ -81,6 +82,19 @@ export interface Category {
   name: string
   parent_id: number | null
   display_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface MatchPattern {
+  type: 'starts_with' | 'contains' | 'exact' | 'regex'
+  pattern: string
+}
+
+export interface Payee {
+  id: number
+  name: string
+  match_patterns: MatchPattern[]
   created_at: string
   updated_at: string
 }

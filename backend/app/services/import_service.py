@@ -15,6 +15,7 @@ from sqlalchemy import and_, extract
 
 from ..models import Transaction, ImportProfile, TransactionSource, TransactionType
 from .csv_parser import ParsedTransaction, CSVParseResult
+from .payee_matcher import apply_payee_match
 
 
 @dataclass
@@ -163,6 +164,8 @@ class ImportService:
                 import_batch_id=batch_id
             )
             self.db.add(db_tx)
+            self.db.flush()
+            apply_payee_match(self.db, db_tx)
             self.db.flush()
             imported_ids.append(db_tx.id)
 

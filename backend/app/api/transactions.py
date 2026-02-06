@@ -6,6 +6,7 @@ from sqlalchemy import and_, extract
 from ..database import get_db
 from ..models import Transaction, Account, TransactionType
 from ..schemas import TransactionCreate, TransactionUpdate, TransactionResponse
+from ..services.payee_matcher import apply_payee_match
 
 router = APIRouter()
 
@@ -68,6 +69,8 @@ def create_transaction(
 
     db_transaction = Transaction(**transaction.model_dump(exclude={"transfer_to_account_id"}))
     db.add(db_transaction)
+    db.flush()
+    apply_payee_match(db, db_transaction)
     db.flush()
     db.refresh(db_transaction)
     return db_transaction

@@ -1,0 +1,63 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { api, Payee, MatchPattern } from '../api/client'
+
+export function usePayees() {
+  return useQuery({
+    queryKey: ['payees'],
+    queryFn: () => api.get<Payee[]>('/payees/')
+  })
+}
+
+export function useCreatePayee() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: { name: string; match_patterns: MatchPattern[] }) =>
+      api.post<Payee>('/payees/', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payees'] })
+    }
+  })
+}
+
+export function useUpdatePayee() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...data
+    }: {
+      id: number
+      name?: string
+      match_patterns?: MatchPattern[]
+    }) => api.patch<Payee>(`/payees/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payees'] })
+    }
+  })
+}
+
+export function useDeletePayee() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: number) => api.delete(`/payees/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payees'] })
+    }
+  })
+}
+
+export function useRematchPayees() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () =>
+      api.post<{ updated_count: number }>('/payees/rematch'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payees'] })
+      queryClient.invalidateQueries({ queryKey: ['transactions'] })
+    }
+  })
+}

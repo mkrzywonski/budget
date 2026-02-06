@@ -59,6 +59,24 @@ export default function Layout({ bookName, children }: LayoutProps) {
               ))}
             </div>
           </div>
+
+          <div className="mt-4">
+            <h2 className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              Manage
+            </h2>
+            <div className="mt-2 space-y-1">
+              <Link
+                to="/payees"
+                className={`block px-3 py-2 rounded ${
+                  location.pathname === '/payees'
+                    ? 'bg-gray-700 text-white'
+                    : 'text-gray-300 hover:bg-gray-700'
+                }`}
+              >
+                Payees
+              </Link>
+            </div>
+          </div>
         </nav>
       </aside>
 

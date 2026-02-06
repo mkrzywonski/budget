@@ -8,6 +8,7 @@ from .import_schemas import (
     ImportCommitResponse,
     ImportProfileResponse,
 )
+from .payee import PayeeCreate, PayeeUpdate, PayeeResponse, RematchResponse
 
 __all__ = [
     "AccountCreate",
@@ -24,4 +25,8 @@ __all__ = [
     "ImportCommitRequest",
     "ImportCommitResponse",
     "ImportProfileResponse",
+    "PayeeCreate",
+    "PayeeUpdate",
+    "PayeeResponse",
+    "RematchResponse",
 ]

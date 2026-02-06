@@ -44,6 +44,7 @@ class Transaction(Base, TimestampMixin):
     # Payee information
     payee_raw: Mapped[str | None] = mapped_column(String(500), nullable=True)
     payee_normalized: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Additional details
     memo: Mapped[str | None] = mapped_column(String(1000), nullable=True)

@@ -10,6 +10,7 @@ class TransactionBase(BaseModel):
     amount_cents: int
     payee_raw: str | None = None
     payee_normalized: str | None = None
+    display_name: str | None = None
     memo: str | None = None
     notes: str | None = None
     category_id: int | None = None
@@ -30,6 +31,7 @@ class TransactionUpdate(BaseModel):
     amount_cents: int | None = None
     payee_raw: str | None = None
     payee_normalized: str | None = None
+    display_name: str | None = None
     memo: str | None = None
     notes: str | None = None
     category_id: int | None = None

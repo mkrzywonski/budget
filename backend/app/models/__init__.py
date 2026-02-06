@@ -5,6 +5,7 @@ from .category import Category
 from .categorization_rule import CategorizationRule, RuleMatchType
 from .recurring_template import RecurringTemplate, AmountMethod, Frequency
 from .import_profile import ImportProfile
+from .payee import Payee
 
 __all__ = [
     "Base",
@@ -19,4 +20,5 @@ __all__ = [
     "AmountMethod",
     "Frequency",
     "ImportProfile",
+    "Payee",
 ]

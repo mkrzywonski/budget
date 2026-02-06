@@ -3,6 +3,7 @@ import { useBookStatus } from './hooks/useBook'
 import BookPicker from './pages/BookPicker'
 import Dashboard from './pages/Dashboard'
 import Ledger from './pages/Ledger'
+import Payees from './pages/Payees'
 import Layout from './components/Layout'
 
 function App() {
@@ -26,6 +27,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/accounts/:accountId" element={<Ledger />} />
+        <Route path="/payees" element={<Payees />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
