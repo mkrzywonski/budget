@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-gray-50 text-gray-900;
+}
+
+/* Spreadsheet-style focus for keyboard navigation */
+.cell-focused {
+  @apply ring-2 ring-blue-500 ring-inset;
+}
+
+/* Forecast row styling */
+.row-forecast {
+  @apply bg-forecast-bg text-forecast-text;
+}
+
+/* Transaction amount styling */
+.amount-positive {
+  @apply text-green-600;
+}
+
+.amount-negative {
+  @apply text-red-600;
+}

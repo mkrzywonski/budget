@@ -1,0 +1,730 @@
+import { useState, useCallback } from 'react'
+import { format } from 'date-fns'
+import clsx from 'clsx'
+import {
+  usePreviewCSV,
+  useCommitImport,
+  useCreateProfile,
+  CSVPreviewResponse,
+  ColumnMappings,
+  AmountConfig
+} from '../hooks/useImport'
+import { formatCurrency } from '../utils/format'
+
+interface ImportModalProps {
+  accountId: number
+  accountName: string
+  onClose: () => void
+  onSuccess: () => void
+}
+
+type Step = 'upload' | 'mapping' | 'preview' | 'complete'
+
+export default function ImportModal({
+  accountId,
+  accountName,
+  onClose,
+  onSuccess
+}: ImportModalProps) {
+  const [step, setStep] = useState<Step>('upload')
+  const [fileContent, setFileContent] = useState('')
+  const [fileName, setFileName] = useState('')
+  const [delimiter, setDelimiter] = useState(',')
+  const [skipRows, setSkipRows] = useState(0)
+
+  const [preview, setPreview] = useState<CSVPreviewResponse | null>(null)
+  const [mappings, setMappings] = useState<ColumnMappings>({ date: 0 })
+  const [amountConfig, setAmountConfig] = useState<AmountConfig>({
+    type: 'single',
+    column: 1,
+    negate: false
+  })
+
+  const [acceptedDuplicates, setAcceptedDuplicates] = useState<Set<number>>(new Set())
+  const [saveProfile, setSaveProfile] = useState(false)
+  const [profileName, setProfileName] = useState('')
+
+  const previewMutation = usePreviewCSV()
+  const commitMutation = useCommitImport()
+  const createProfileMutation = useCreateProfile()
+
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setFileName(file.name)
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      setFileContent(event.target?.result as string)
+    }
+    reader.readAsText(file)
+  }, [])
+
+  const handlePreview = async () => {
+    if (!fileContent) return
+
+    const result = await previewMutation.mutateAsync({
+      content: fileContent,
+      account_id: accountId,
+      delimiter,
+      skip_rows: skipRows
+    })
+
+    setPreview(result)
+
+    // Use detected mappings if available
+    if (result.detected_mappings) {
+      setMappings(result.detected_mappings)
+      if (result.detected_mappings.amount !== undefined) {
+        setAmountConfig({
+          type: 'single',
+          column: result.detected_mappings.amount,
+          negate: false
+        })
+      }
+    }
+
+    // If profile matched, skip to preview
+    if (result.matched_profile_id) {
+      setStep('preview')
+    } else {
+      setStep('mapping')
+    }
+  }
+
+  const handleApplyMappings = async () => {
+    if (!fileContent) return
+
+    const result = await previewMutation.mutateAsync({
+      content: fileContent,
+      account_id: accountId,
+      delimiter,
+      skip_rows: skipRows,
+      column_mappings: mappings,
+      amount_config: amountConfig
+    })
+
+    setPreview(result)
+    setStep('preview')
+  }
+
+  const handleToggleDuplicate = (rowIndex: number) => {
+    setAcceptedDuplicates(prev => {
+      const next = new Set(prev)
+      if (next.has(rowIndex)) {
+        next.delete(rowIndex)
+      } else {
+        next.add(rowIndex)
+      }
+      return next
+    })
+  }
+
+  const handleAcceptAllDuplicates = () => {
+    if (!preview) return
+    const indices = preview.duplicates.map(d => d.parsed.row_index)
+    setAcceptedDuplicates(new Set(indices))
+  }
+
+  const handleRejectAllDuplicates = () => {
+    setAcceptedDuplicates(new Set())
+  }
+
+  const handleCommit = async () => {
+    if (!preview) return
+
+    // Combine new transactions with accepted duplicates
+    const allTransactions = [
+      ...preview.new_transactions,
+      ...preview.duplicates
+        .filter(d => acceptedDuplicates.has(d.parsed.row_index))
+        .map(d => d.parsed)
+    ]
+
+    await commitMutation.mutateAsync({
+      account_id: accountId,
+      batch_id: preview.batch_id,
+      transactions: allTransactions,
+      accepted_duplicate_indices: Array.from(acceptedDuplicates)
+    })
+
+    // Save profile if requested
+    if (saveProfile && profileName && preview.headers) {
+      await createProfileMutation.mutateAsync({
+        account_id: accountId,
+        name: profileName,
+        headers: preview.headers,
+        column_mappings: mappings,
+        amount_config: amountConfig,
+        delimiter,
+        skip_rows: skipRows
+      })
+    }
+
+    setStep('complete')
+  }
+
+  const handleDone = () => {
+    onSuccess()
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="px-6 py-4 border-b flex justify-between items-center">
+          <div>
+            <h2 className="text-xl font-semibold">Import Transactions</h2>
+            <p className="text-sm text-gray-500">{accountName}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 text-2xl"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-auto p-6">
+          {step === 'upload' && (
+            <UploadStep
+              fileName={fileName}
+              delimiter={delimiter}
+              skipRows={skipRows}
+              onFileSelect={handleFileSelect}
+              onDelimiterChange={setDelimiter}
+              onSkipRowsChange={setSkipRows}
+            />
+          )}
+
+          {step === 'mapping' && preview && (
+            <MappingStep
+              headers={preview.headers}
+              mappings={mappings}
+              amountConfig={amountConfig}
+              onMappingsChange={setMappings}
+              onAmountConfigChange={setAmountConfig}
+            />
+          )}
+
+          {step === 'preview' && preview && (
+            <PreviewStep
+              preview={preview}
+              acceptedDuplicates={acceptedDuplicates}
+              onToggleDuplicate={handleToggleDuplicate}
+              onAcceptAll={handleAcceptAllDuplicates}
+              onRejectAll={handleRejectAllDuplicates}
+              saveProfile={saveProfile}
+              profileName={profileName}
+              onSaveProfileChange={setSaveProfile}
+              onProfileNameChange={setProfileName}
+              showSaveProfile={!preview.matched_profile_id}
+            />
+          )}
+
+          {step === 'complete' && commitMutation.data && (
+            <CompleteStep result={commitMutation.data} />
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t flex justify-between">
+          <div>
+            {step !== 'upload' && step !== 'complete' && (
+              <button
+                onClick={() => setStep(step === 'preview' ? 'mapping' : 'upload')}
+                className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+              >
+                Back
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            {step === 'upload' && (
+              <button
+                onClick={handlePreview}
+                disabled={!fileContent || previewMutation.isPending}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+              >
+                {previewMutation.isPending ? 'Processing...' : 'Continue'}
+              </button>
+            )}
+            {step === 'mapping' && (
+              <button
+                onClick={handleApplyMappings}
+                disabled={previewMutation.isPending}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+              >
+                {previewMutation.isPending ? 'Processing...' : 'Preview Import'}
+              </button>
+            )}
+            {step === 'preview' && (
+              <button
+                onClick={handleCommit}
+                disabled={commitMutation.isPending}
+                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+              >
+                {commitMutation.isPending ? 'Importing...' : `Import ${preview?.new_count} Transactions`}
+              </button>
+            )}
+            {step === 'complete' && (
+              <button
+                onClick={handleDone}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Done
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Step Components
+
+function UploadStep({
+  fileName,
+  delimiter,
+  skipRows,
+  onFileSelect,
+  onDelimiterChange,
+  onSkipRowsChange
+}: {
+  fileName: string
+  delimiter: string
+  skipRows: number
+  onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void
+  onDelimiterChange: (v: string) => void
+  onSkipRowsChange: (v: number) => void
+}) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Select CSV File
+        </label>
+        <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+          <input
+            type="file"
+            accept=".csv,.txt"
+            onChange={onFileSelect}
+            className="hidden"
+            id="csv-upload"
+          />
+          <label
+            htmlFor="csv-upload"
+            className="cursor-pointer text-blue-600 hover:text-blue-700"
+          >
+            {fileName || 'Click to select a file'}
+          </label>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Delimiter
+          </label>
+          <select
+            value={delimiter}
+            onChange={(e) => onDelimiterChange(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded"
+          >
+            <option value=",">Comma (,)</option>
+            <option value=";">Semicolon (;)</option>
+            <option value="\t">Tab</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Skip Rows
+          </label>
+          <input
+            type="number"
+            min="0"
+            value={skipRows}
+            onChange={(e) => onSkipRowsChange(Number(e.target.value))}
+            className="w-full px-3 py-2 border border-gray-300 rounded"
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MappingStep({
+  headers,
+  mappings,
+  amountConfig,
+  onMappingsChange,
+  onAmountConfigChange
+}: {
+  headers: string[]
+  mappings: ColumnMappings
+  amountConfig: AmountConfig
+  onMappingsChange: (m: ColumnMappings) => void
+  onAmountConfigChange: (c: AmountConfig) => void
+}) {
+  const columnOptions = headers.map((h, i) => (
+    <option key={i} value={i}>{h}</option>
+  ))
+
+  return (
+    <div className="space-y-6">
+      <p className="text-sm text-gray-600">
+        Map columns from your CSV file to transaction fields.
+      </p>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Date Column *
+          </label>
+          <select
+            value={mappings.date}
+            onChange={(e) => onMappingsChange({ ...mappings, date: Number(e.target.value) })}
+            className="w-full px-3 py-2 border border-gray-300 rounded"
+          >
+            {columnOptions}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Payee/Description Column
+          </label>
+          <select
+            value={mappings.payee ?? ''}
+            onChange={(e) => onMappingsChange({
+              ...mappings,
+              payee: e.target.value ? Number(e.target.value) : undefined
+            })}
+            className="w-full px-3 py-2 border border-gray-300 rounded"
+          >
+            <option value="">— None —</option>
+            {columnOptions}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Memo Column
+          </label>
+          <select
+            value={mappings.memo ?? ''}
+            onChange={(e) => onMappingsChange({
+              ...mappings,
+              memo: e.target.value ? Number(e.target.value) : undefined
+            })}
+            className="w-full px-3 py-2 border border-gray-300 rounded"
+          >
+            <option value="">— None —</option>
+            {columnOptions}
+          </select>
+        </div>
+      </div>
+
+      <div className="border-t pt-4">
+        <h3 className="font-medium mb-4">Amount Configuration</h3>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Amount Type
+            </label>
+            <select
+              value={amountConfig.type}
+              onChange={(e) => onAmountConfigChange({
+                ...amountConfig,
+                type: e.target.value as 'single' | 'split'
+              })}
+              className="w-full px-3 py-2 border border-gray-300 rounded"
+            >
+              <option value="single">Single Amount Column</option>
+              <option value="split">Separate Debit/Credit Columns</option>
+            </select>
+          </div>
+
+          {amountConfig.type === 'single' ? (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Amount Column
+                </label>
+                <select
+                  value={amountConfig.column ?? 1}
+                  onChange={(e) => onAmountConfigChange({
+                    ...amountConfig,
+                    column: Number(e.target.value)
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded"
+                >
+                  {columnOptions}
+                </select>
+              </div>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={amountConfig.negate}
+                  onChange={(e) => onAmountConfigChange({
+                    ...amountConfig,
+                    negate: e.target.checked
+                  })}
+                  className="rounded"
+                />
+                <span className="text-sm text-gray-700">
+                  Negate amounts (expenses are positive in file)
+                </span>
+              </label>
+            </>
+          ) : (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Debit Column (expenses)
+                </label>
+                <select
+                  value={amountConfig.debit_column ?? 0}
+                  onChange={(e) => onAmountConfigChange({
+                    ...amountConfig,
+                    debit_column: Number(e.target.value)
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded"
+                >
+                  {columnOptions}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Credit Column (income)
+                </label>
+                <select
+                  value={amountConfig.credit_column ?? 1}
+                  onChange={(e) => onAmountConfigChange({
+                    ...amountConfig,
+                    credit_column: Number(e.target.value)
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded"
+                >
+                  {columnOptions}
+                </select>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PreviewStep({
+  preview,
+  acceptedDuplicates,
+  onToggleDuplicate,
+  onAcceptAll,
+  onRejectAll,
+  saveProfile,
+  profileName,
+  onSaveProfileChange,
+  onProfileNameChange,
+  showSaveProfile
+}: {
+  preview: CSVPreviewResponse
+  acceptedDuplicates: Set<number>
+  onToggleDuplicate: (idx: number) => void
+  onAcceptAll: () => void
+  onRejectAll: () => void
+  saveProfile: boolean
+  profileName: string
+  onSaveProfileChange: (v: boolean) => void
+  onProfileNameChange: (v: string) => void
+  showSaveProfile: boolean
+}) {
+  return (
+    <div className="space-y-6">
+      {/* Summary */}
+      <div className="flex gap-4 text-sm">
+        <div className="bg-green-50 text-green-700 px-3 py-2 rounded">
+          {preview.new_count} new transactions
+        </div>
+        {preview.duplicate_count > 0 && (
+          <div className="bg-yellow-50 text-yellow-700 px-3 py-2 rounded">
+            {preview.duplicate_count} potential duplicates
+          </div>
+        )}
+        {preview.error_count > 0 && (
+          <div className="bg-red-50 text-red-700 px-3 py-2 rounded">
+            {preview.error_count} errors
+          </div>
+        )}
+      </div>
+
+      {preview.matched_profile_name && (
+        <div className="bg-blue-50 text-blue-700 px-3 py-2 rounded text-sm">
+          Using saved profile: {preview.matched_profile_name}
+        </div>
+      )}
+
+      {/* Duplicates section */}
+      {preview.duplicates.length > 0 && (
+        <div>
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="font-medium">Potential Duplicates</h3>
+            <div className="space-x-2">
+              <button
+                onClick={onAcceptAll}
+                className="text-sm text-green-600 hover:underline"
+              >
+                Accept All
+              </button>
+              <button
+                onClick={onRejectAll}
+                className="text-sm text-red-600 hover:underline"
+              >
+                Reject All
+              </button>
+            </div>
+          </div>
+          <div className="border rounded max-h-48 overflow-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 sticky top-0">
+                <tr>
+                  <th className="px-3 py-2 text-left w-12">Import?</th>
+                  <th className="px-3 py-2 text-left">Date</th>
+                  <th className="px-3 py-2 text-left">Payee</th>
+                  <th className="px-3 py-2 text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {preview.duplicates.map((dup) => (
+                  <tr
+                    key={dup.fingerprint}
+                    className={clsx(
+                      'hover:bg-gray-50',
+                      acceptedDuplicates.has(dup.parsed.row_index) && 'bg-green-50'
+                    )}
+                  >
+                    <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={acceptedDuplicates.has(dup.parsed.row_index)}
+                        onChange={() => onToggleDuplicate(dup.parsed.row_index)}
+                        className="rounded"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      {format(new Date(dup.parsed.posted_date), 'MM/dd/yyyy')}
+                    </td>
+                    <td className="px-3 py-2">{dup.parsed.payee_raw || '—'}</td>
+                    <td className="px-3 py-2 text-right font-mono">
+                      {formatCurrency(dup.parsed.amount_cents)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* New transactions preview */}
+      <div>
+        <h3 className="font-medium mb-2">New Transactions</h3>
+        <div className="border rounded max-h-64 overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 sticky top-0">
+              <tr>
+                <th className="px-3 py-2 text-left">Date</th>
+                <th className="px-3 py-2 text-left">Payee</th>
+                <th className="px-3 py-2 text-left">Memo</th>
+                <th className="px-3 py-2 text-right">Amount</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {preview.new_transactions.slice(0, 50).map((tx) => (
+                <tr key={tx.row_index} className="hover:bg-gray-50">
+                  <td className="px-3 py-2">
+                    {format(new Date(tx.posted_date), 'MM/dd/yyyy')}
+                  </td>
+                  <td className="px-3 py-2">{tx.payee_raw || '—'}</td>
+                  <td className="px-3 py-2 text-gray-500 truncate max-w-xs">
+                    {tx.memo || ''}
+                  </td>
+                  <td className={clsx(
+                    'px-3 py-2 text-right font-mono',
+                    tx.amount_cents >= 0 ? 'text-green-600' : 'text-red-600'
+                  )}>
+                    {formatCurrency(tx.amount_cents)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {preview.new_transactions.length > 50 && (
+            <div className="px-3 py-2 text-sm text-gray-500 bg-gray-50">
+              ... and {preview.new_transactions.length - 50} more
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Save profile option */}
+      {showSaveProfile && (
+        <div className="border-t pt-4">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={saveProfile}
+              onChange={(e) => onSaveProfileChange(e.target.checked)}
+              className="rounded"
+            />
+            <span className="text-sm text-gray-700">
+              Save these settings as an import profile
+            </span>
+          </label>
+          {saveProfile && (
+            <input
+              type="text"
+              value={profileName}
+              onChange={(e) => onProfileNameChange(e.target.value)}
+              placeholder="Profile name (e.g., Chase Checking)"
+              className="mt-2 w-full px-3 py-2 border border-gray-300 rounded"
+            />
+          )}
+        </div>
+      )}
+
+      {/* Errors */}
+      {preview.errors.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded p-3">
+          <h4 className="font-medium text-red-700 mb-1">Parsing Errors</h4>
+          <ul className="text-sm text-red-600 list-disc list-inside">
+            {preview.errors.slice(0, 5).map((err, i) => (
+              <li key={i}>{err}</li>
+            ))}
+            {preview.errors.length > 5 && (
+              <li>... and {preview.errors.length - 5} more</li>
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CompleteStep({ result }: { result: { imported_count: number; skipped_count: number } }) {
+  return (
+    <div className="text-center py-8">
+      <div className="text-6xl mb-4">✓</div>
+      <h3 className="text-xl font-semibold mb-2">Import Complete</h3>
+      <p className="text-gray-600">
+        Successfully imported {result.imported_count} transactions.
+        {result.skipped_count > 0 && ` (${result.skipped_count} skipped as duplicates)`}
+      </p>
+    </div>
+  )
+}
