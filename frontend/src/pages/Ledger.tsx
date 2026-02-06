@@ -10,7 +10,8 @@ import {
 } from '../hooks/useTransactions'
 import { useCreatePayee } from '../hooks/usePayees'
 import { usePayees } from '../hooks/usePayees'
-import { Transaction } from '../api/client'
+import { useCategories } from '../hooks/useCategories'
+import { Transaction, Category } from '../api/client'
 import { formatCurrency, parseCurrency } from '../utils/format'
 import ImportModal from '../components/ImportModal'
 import clsx from 'clsx'
@@ -66,6 +67,22 @@ export default function Ledger() {
   const deleteMutation = useDeleteTransaction()
   const createPayeeMutation = useCreatePayee()
   const { data: payees } = usePayees()
+  const { data: categories } = useCategories()
+
+  const categoryMap = useMemo(() => {
+    const map = new Map<number, string>()
+    if (!categories) return map
+    const byId = new Map(categories.map((c) => [c.id, c]))
+    for (const cat of categories) {
+      if (cat.parent_id) {
+        const parent = byId.get(cat.parent_id)
+        map.set(cat.id, parent ? `${parent.name} > ${cat.name}` : cat.name)
+      } else {
+        map.set(cat.id, cat.name)
+      }
+    }
+    return map
+  }, [categories])
 
   const entryDefaultDate = useMemo(() => {
     if (!transactions || transactions.length === 0) {
@@ -162,6 +179,7 @@ export default function Ledger() {
     payee_raw: string
     memo: string
     type: TxType
+    category_id: number | null
   }) => {
     setLastType(data.type)
     await createMutation.mutateAsync({
@@ -169,7 +187,8 @@ export default function Ledger() {
       posted_date: data.posted_date,
       amount_cents: applyTypeSign(data.type, data.amount_cents),
       payee_raw: data.payee_raw || undefined,
-      memo: data.memo || undefined
+      memo: data.memo || undefined,
+      category_id: data.category_id ?? undefined
     })
   }
 
@@ -180,9 +199,11 @@ export default function Ledger() {
       amount_cents?: number
       payee_raw?: string
       memo?: string
+      category_id?: number | null
     }
   ) => {
-    await updateMutation.mutateAsync({ id: txId, ...data })
+    const { category_id, ...rest } = data
+    await updateMutation.mutateAsync({ id: txId, ...rest, category_id: category_id ?? undefined })
     setEditingId(null)
   }
 
@@ -312,6 +333,7 @@ export default function Ledger() {
                   <EditRow
                     key={tx.id}
                     transaction={tx}
+                    categories={categories || []}
                     onSave={(data) => handleUpdate(tx.id, data)}
                     onCancel={() => setEditingId(null)}
                   />
@@ -319,6 +341,7 @@ export default function Ledger() {
                   <TransactionRow
                     key={tx.id}
                     transaction={tx}
+                    categoryMap={categoryMap}
                     runningBalance={balanceMap.get(tx.id) ?? 0}
                     onEdit={() => setEditingId(tx.id)}
                     onDelete={() => handleDelete(tx.id)}
@@ -330,6 +353,7 @@ export default function Ledger() {
               <EntryRow
                 defaultDate={entryDefaultDate}
                 defaultType={lastType}
+                categories={categories || []}
                 onSubmit={handleCreate}
                 isPending={createMutation.isPending}
                 payeeSuggestions={payeeSuggestions}
@@ -363,6 +387,7 @@ export default function Ledger() {
 
 interface TransactionRowProps {
   transaction: Transaction
+  categoryMap: Map<number, string>
   runningBalance: number
   onEdit: () => void
   onDelete: () => void
@@ -371,6 +396,7 @@ interface TransactionRowProps {
 
 function TransactionRow({
   transaction: tx,
+  categoryMap,
   runningBalance,
   onEdit,
   onDelete,
@@ -395,7 +421,7 @@ function TransactionRow({
         {tx.display_name || tx.payee_raw || '—'}
       </td>
       <td className="px-4 py-2 text-sm text-gray-500">
-        {tx.category_id || '—'}
+        {tx.category_id ? categoryMap.get(tx.category_id) || '—' : '—'}
       </td>
       <td className="px-4 py-2 text-sm text-gray-500 truncate max-w-xs">
         {tx.memo || ''}
@@ -495,16 +521,18 @@ function TransactionRow({
 
 interface EditRowProps {
   transaction: Transaction
+  categories: Category[]
   onSave: (data: {
     posted_date: string
     amount_cents: number
     payee_raw: string
     memo: string
+    category_id: number | null
   }) => void
   onCancel: () => void
 }
 
-function EditRow({ transaction: tx, onSave, onCancel }: EditRowProps) {
+function EditRow({ transaction: tx, categories, onSave, onCancel }: EditRowProps) {
   const [date, setDate] = useState(tx.posted_date)
   const [type, setType] = useState<TxType>(deriveTxType(tx))
   const [payee, setPayee] = useState(tx.payee_raw || '')
@@ -512,6 +540,7 @@ function EditRow({ transaction: tx, onSave, onCancel }: EditRowProps) {
   const [amount, setAmount] = useState(
     (Math.abs(tx.amount_cents) / 100).toFixed(2)
   )
+  const [categoryId, setCategoryId] = useState<number | null>(tx.category_id)
 
   const doSave = () => {
     const cents = parseCurrency(amount)
@@ -519,7 +548,8 @@ function EditRow({ transaction: tx, onSave, onCancel }: EditRowProps) {
       posted_date: date,
       amount_cents: applyTypeSign(type, cents),
       payee_raw: payee,
-      memo
+      memo,
+      category_id: categoryId
     })
   }
 
@@ -559,7 +589,23 @@ function EditRow({ transaction: tx, onSave, onCancel }: EditRowProps) {
           className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
         />
       </td>
-      <td className="px-4 py-1 text-sm text-gray-400">—</td>
+      <td className="px-4 py-1">
+        <select
+          value={categoryId ?? ''}
+          onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : null)}
+          className="w-full px-1 py-1 text-sm border border-gray-300 rounded"
+        >
+          <option value="">—</option>
+          {categories.filter((c) => !c.parent_id).map((parent) => (
+            <optgroup key={parent.id} label={parent.name}>
+              <option value={parent.id}>{parent.name}</option>
+              {categories.filter((c) => c.parent_id === parent.id).map((child) => (
+                <option key={child.id} value={child.id}>{child.name}</option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </td>
       <td className="px-4 py-1">
         <input
           type="text"
@@ -630,12 +676,14 @@ function EditRow({ transaction: tx, onSave, onCancel }: EditRowProps) {
 interface EntryRowProps {
   defaultDate: string
   defaultType: TxType
+  categories: Category[]
   onSubmit: (data: {
     posted_date: string
     amount_cents: number
     payee_raw: string
     memo: string
     type: TxType
+    category_id: number | null
   }) => Promise<void>
   isPending: boolean
   payeeSuggestions: string[]
@@ -644,6 +692,7 @@ interface EntryRowProps {
 function EntryRow({
   defaultDate,
   defaultType,
+  categories,
   onSubmit,
   isPending,
   payeeSuggestions
@@ -653,6 +702,7 @@ function EntryRow({
   const [payee, setPayee] = useState('')
   const [memo, setMemo] = useState('')
   const [amount, setAmount] = useState('')
+  const [categoryId, setCategoryId] = useState<number | null>(null)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
   const dateRef = useRef<HTMLInputElement>(null)
@@ -690,13 +740,15 @@ function EntryRow({
       amount_cents: parseCurrency(amount),
       payee_raw: payee,
       memo,
-      type
+      type,
+      category_id: categoryId
     })
 
     // Reset fields but keep type sticky
     setPayee('')
     setMemo('')
     setAmount('')
+    setCategoryId(null)
     dateRef.current?.focus()
   }
 
@@ -802,7 +854,23 @@ function EntryRow({
           )}
         </div>
       </td>
-      <td className="px-4 py-1.5 text-sm text-gray-300">—</td>
+      <td className="px-4 py-1.5">
+        <select
+          value={categoryId ?? ''}
+          onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : null)}
+          className="w-full px-1 py-1 text-sm border border-gray-300 rounded bg-white"
+        >
+          <option value="">—</option>
+          {categories.filter((c) => !c.parent_id).map((parent) => (
+            <optgroup key={parent.id} label={parent.name}>
+              <option value={parent.id}>{parent.name}</option>
+              {categories.filter((c) => c.parent_id === parent.id).map((child) => (
+                <option key={child.id} value={child.id}>{child.name}</option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </td>
       <td className="px-4 py-1.5">
         <input
           type="text"
