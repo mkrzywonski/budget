@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import {
   usePayees,
   useCreatePayee,
@@ -20,6 +21,8 @@ const MATCH_TYPES = [
 const EMPTY_PATTERN: MatchPattern = { type: 'starts_with', pattern: '' }
 
 export default function Payees() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const { data: payees, isLoading } = usePayees()
   const createMutation = useCreatePayee()
   const updateMutation = useUpdatePayee()
@@ -29,6 +32,15 @@ export default function Payees() {
   const [showAdd, setShowAdd] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [rematchResult, setRematchResult] = useState<number | null>(null)
+
+  useEffect(() => {
+    const state = location.state as { editPayeeId?: number } | null
+    if (state?.editPayeeId) {
+      setEditingId(state.editPayeeId)
+      setShowAdd(false)
+      navigate('/payees', { replace: true, state: {} })
+    }
+  }, [location.state, navigate])
 
   const handleRematch = async () => {
     const result = await rematchMutation.mutateAsync()

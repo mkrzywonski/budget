@@ -126,11 +126,11 @@ export default function Ledger() {
     const rawPayee = tx.payee_raw || tx.display_name
     if (!rawPayee) return
     try {
-      await createPayeeMutation.mutateAsync({
+      const created = await createPayeeMutation.mutateAsync({
         name: tx.display_name || rawPayee,
         match_patterns: [{ type: 'exact', pattern: rawPayee }]
       })
-      navigate('/payees')
+      navigate('/payees', { state: { editPayeeId: created.id } })
     } catch (error) {
       console.error('Failed to create payee', error)
       window.alert('Failed to create payee. Check the console for details.')
