@@ -9,6 +9,7 @@ import {
   useDeleteTransaction
 } from '../hooks/useTransactions'
 import { useCreatePayee } from '../hooks/usePayees'
+import { usePayees } from '../hooks/usePayees'
 import { Transaction } from '../api/client'
 import { formatCurrency, parseCurrency } from '../utils/format'
 import ImportModal from '../components/ImportModal'
@@ -64,6 +65,7 @@ export default function Ledger() {
   const updateMutation = useUpdateTransaction()
   const deleteMutation = useDeleteTransaction()
   const createPayeeMutation = useCreatePayee()
+  const { data: payees } = usePayees()
 
   const entryDefaultDate = useMemo(() => {
     if (!transactions || transactions.length === 0) {
@@ -75,6 +77,12 @@ export default function Ledger() {
       .slice(-1)[0]
     return latest || format(currentDate, 'yyyy-MM-dd')
   }, [transactions, currentDate])
+
+  const payeeSuggestions = useMemo(() => {
+    if (!payees) return []
+    const names = payees.map((payee) => payee.name).filter(Boolean)
+    return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b))
+  }, [payees])
 
   // Sort transactions
   const sorted = useMemo(() => {
@@ -324,6 +332,7 @@ export default function Ledger() {
                 defaultType={lastType}
                 onSubmit={handleCreate}
                 isPending={createMutation.isPending}
+                payeeSuggestions={payeeSuggestions}
               />
             </tbody>
           </table>
@@ -629,14 +638,23 @@ interface EntryRowProps {
     type: TxType
   }) => Promise<void>
   isPending: boolean
+  payeeSuggestions: string[]
 }
 
-function EntryRow({ defaultDate, defaultType, onSubmit, isPending }: EntryRowProps) {
+function EntryRow({
+  defaultDate,
+  defaultType,
+  onSubmit,
+  isPending,
+  payeeSuggestions
+}: EntryRowProps) {
   const [date, setDate] = useState(defaultDate)
   const [type, setType] = useState<TxType>(defaultType)
   const [payee, setPayee] = useState('')
   const [memo, setMemo] = useState('')
   const [amount, setAmount] = useState('')
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(-1)
   const dateRef = useRef<HTMLInputElement>(null)
 
   // Sync default type when parent updates it (after a submission)
@@ -647,6 +665,22 @@ function EntryRow({ defaultDate, defaultType, onSubmit, isPending }: EntryRowPro
   }
 
   const isEmpty = !payee && !amount
+
+  const filteredSuggestions = useMemo(() => {
+    if (!payee.trim()) return []
+    const query = payee.toLowerCase()
+    const startsWith: string[] = []
+    const contains: string[] = []
+    for (const name of payeeSuggestions) {
+      const lower = name.toLowerCase()
+      if (lower.startsWith(query)) {
+        startsWith.push(name)
+      } else if (lower.includes(query)) {
+        contains.push(name)
+      }
+    }
+    return [...startsWith, ...contains].slice(0, 8)
+  }, [payee, payeeSuggestions])
 
   const handleSubmit = async () => {
     if (!amount) return
@@ -666,9 +700,42 @@ function EntryRow({ defaultDate, defaultType, onSubmit, isPending }: EntryRowPro
     dateRef.current?.focus()
   }
 
+  const handlePayeeSelect = (value: string) => {
+    setPayee(value)
+    setShowSuggestions(false)
+    setActiveIndex(-1)
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !isEmpty) {
       handleSubmit()
+    }
+  }
+
+  const handlePayeeKeyDown = (e: React.KeyboardEvent) => {
+    if (!showSuggestions || filteredSuggestions.length === 0) {
+      handleKeyDown(e)
+      return
+    }
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActiveIndex((idx) =>
+        Math.min(idx + 1, filteredSuggestions.length - 1)
+      )
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActiveIndex((idx) => Math.max(idx - 1, 0))
+    } else if (e.key === 'Enter') {
+      if (activeIndex >= 0) {
+        e.preventDefault()
+        handlePayeeSelect(filteredSuggestions[activeIndex])
+      } else {
+        handleKeyDown(e)
+      }
+    } else if (e.key === 'Escape') {
+      setShowSuggestions(false)
+      setActiveIndex(-1)
     }
   }
 
@@ -696,14 +763,44 @@ function EntryRow({ defaultDate, defaultType, onSubmit, isPending }: EntryRowPro
         </select>
       </td>
       <td className="px-4 py-1.5">
-        <input
-          type="text"
-          value={payee}
-          onChange={(e) => setPayee(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Payee"
-          className="w-full px-2 py-1 text-sm border border-gray-300 rounded bg-white placeholder-gray-300"
-        />
+        <div className="relative">
+          <input
+            type="text"
+            value={payee}
+            onChange={(e) => {
+              setPayee(e.target.value)
+              setShowSuggestions(true)
+              setActiveIndex(-1)
+            }}
+            onKeyDown={handlePayeeKeyDown}
+            onFocus={() => setShowSuggestions(true)}
+            onBlur={() => {
+              setTimeout(() => setShowSuggestions(false), 100)
+            }}
+            placeholder="Payee"
+            className="w-full px-2 py-1 text-sm border border-gray-300 rounded bg-white placeholder-gray-300"
+          />
+          {showSuggestions && filteredSuggestions.length > 0 && (
+            <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded shadow-sm max-h-48 overflow-auto">
+              {filteredSuggestions.map((name, index) => (
+                <button
+                  key={name}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    handlePayeeSelect(name)
+                  }}
+                  className={clsx(
+                    'w-full text-left px-2 py-1 text-sm hover:bg-gray-100',
+                    index === activeIndex && 'bg-gray-100'
+                  )}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </td>
       <td className="px-4 py-1.5 text-sm text-gray-300">—</td>
       <td className="px-4 py-1.5">
