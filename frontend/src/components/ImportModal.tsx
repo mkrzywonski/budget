@@ -5,9 +5,11 @@ import {
   usePreviewCSV,
   useCommitImport,
   useCreateProfile,
+  useImportProfiles,
   CSVPreviewResponse,
   ColumnMappings,
-  AmountConfig
+  AmountConfig,
+  ImportProfile
 } from '../hooks/useImport'
 import { formatCurrency } from '../utils/format'
 
@@ -44,9 +46,23 @@ export default function ImportModal({
   const [saveProfile, setSaveProfile] = useState(false)
   const [profileName, setProfileName] = useState('')
 
+  const [selectedProfileId, setSelectedProfileId] = useState<number | null>(null)
+
+  const { data: profiles } = useImportProfiles(accountId)
   const previewMutation = usePreviewCSV()
   const commitMutation = useCommitImport()
   const createProfileMutation = useCreateProfile()
+
+  const handleProfileSelect = (profileId: number | null) => {
+    setSelectedProfileId(profileId)
+    if (profileId && profiles) {
+      const profile = profiles.find(p => p.id === profileId)
+      if (profile) {
+        setDelimiter(profile.delimiter || ',')
+        setSkipRows(profile.skip_rows || 0)
+      }
+    }
+  }
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -63,11 +79,20 @@ export default function ImportModal({
   const handlePreview = async () => {
     if (!fileContent) return
 
+    const selectedProfile = selectedProfileId
+      ? profiles?.find(p => p.id === selectedProfileId)
+      : null
+
     const result = await previewMutation.mutateAsync({
       content: fileContent,
       account_id: accountId,
       delimiter,
-      skip_rows: skipRows
+      skip_rows: skipRows,
+      ...(selectedProfile && {
+        column_mappings: selectedProfile.column_mappings as unknown as ColumnMappings,
+        amount_config: selectedProfile.amount_config,
+        ...(selectedProfile.date_format && { date_format: selectedProfile.date_format }),
+      }),
     })
 
     setPreview(result)
@@ -84,8 +109,8 @@ export default function ImportModal({
       }
     }
 
-    // If profile matched, skip to preview
-    if (result.matched_profile_id) {
+    // If profile matched (auto or manual), skip to preview
+    if (result.matched_profile_id || selectedProfile) {
       setStep('preview')
     } else {
       setStep('mapping')
@@ -196,6 +221,9 @@ export default function ImportModal({
               onFileSelect={handleFileSelect}
               onDelimiterChange={setDelimiter}
               onSkipRowsChange={setSkipRows}
+              profiles={profiles || []}
+              selectedProfileId={selectedProfileId}
+              onProfileSelect={handleProfileSelect}
             />
           )}
 
@@ -292,7 +320,10 @@ function UploadStep({
   skipRows,
   onFileSelect,
   onDelimiterChange,
-  onSkipRowsChange
+  onSkipRowsChange,
+  profiles,
+  selectedProfileId,
+  onProfileSelect
 }: {
   fileName: string
   delimiter: string
@@ -300,6 +331,9 @@ function UploadStep({
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void
   onDelimiterChange: (v: string) => void
   onSkipRowsChange: (v: number) => void
+  profiles: ImportProfile[]
+  selectedProfileId: number | null
+  onProfileSelect: (id: number | null) => void
 }) {
   return (
     <div className="space-y-6">
@@ -323,6 +357,27 @@ function UploadStep({
           </label>
         </div>
       </div>
+
+      {profiles.length > 0 && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Import Profile
+          </label>
+          <select
+            value={selectedProfileId ?? ''}
+            onChange={(e) => onProfileSelect(e.target.value ? Number(e.target.value) : null)}
+            className="w-full px-3 py-2 border border-gray-300 rounded"
+          >
+            <option value="">Auto-detect</option>
+            {profiles.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          <p className="text-xs text-gray-500 mt-1">
+            Select a saved profile to apply its column mappings and settings.
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4">
         <div>

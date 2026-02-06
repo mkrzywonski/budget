@@ -32,7 +32,7 @@ export function useUpdateAccount() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: number; name?: string; account_type?: string }) =>
+    mutationFn: ({ id, ...data }: { id: number; name?: string; account_type?: string; institution?: string }) =>
       api.patch<Account>(`/accounts/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['accounts'] })
