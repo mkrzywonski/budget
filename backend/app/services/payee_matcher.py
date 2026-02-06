@@ -56,6 +56,26 @@ def _matches(raw_lower: str, pattern: str, match_type: str) -> bool:
     return False
 
 
+def matches_patterns(patterns: list[dict], payee_raw: str) -> bool:
+    """Check if any pattern in a list matches a raw payee string."""
+    if not payee_raw:
+        return False
+    raw_lower = payee_raw.lower()
+    for rule in patterns or []:
+        match_type = rule.get("type", "contains")
+        pattern = rule.get("pattern", "")
+        if not pattern:
+            continue
+        if _matches(raw_lower, pattern, match_type):
+            return True
+    return False
+
+
+def matches_payee(payee: Payee, payee_raw: str) -> bool:
+    """Check if a payee's patterns match a raw payee string."""
+    return matches_patterns(payee.match_patterns or [], payee_raw)
+
+
 def apply_payee_match(db: Session, transaction: Transaction) -> None:
     """
     If the transaction has payee_raw, attempt to match it against
@@ -91,20 +111,10 @@ def rematch_all(db: Session) -> int:
     updated = 0
     for tx in transactions:
         old_name = tx.display_name
-        raw_lower = tx.payee_raw.lower()
         new_name = None
 
         for payee in payees:
-            matched = False
-            for rule in payee.match_patterns or []:
-                match_type = rule.get("type", "contains")
-                pattern = rule.get("pattern", "")
-                if not pattern:
-                    continue
-                if _matches(raw_lower, pattern, match_type):
-                    matched = True
-                    break
-            if matched:
+            if matches_payee(payee, tx.payee_raw):
                 new_name = payee.name
                 break
 

@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Payee
+from ..models import Payee, Transaction
 from ..schemas.payee import PayeeCreate, PayeeUpdate, PayeeResponse, RematchResponse
-from ..services.payee_matcher import rematch_all
+from ..services.payee_matcher import rematch_all, matches_payee, matches_patterns
 
 router = APIRouter()
 
@@ -79,3 +79,42 @@ def rematch_payees(db: Session = Depends(get_db)):
     """Re-run payee matching on all transactions."""
     updated_count = rematch_all(db)
     return RematchResponse(updated_count=updated_count)
+
+
+@router.get("/{payee_id}/matches", response_model=list[str])
+def list_payee_matches(payee_id: int, db: Session = Depends(get_db)):
+    """List distinct raw payees that match this payee's patterns."""
+    payee = db.query(Payee).filter(Payee.id == payee_id).first()
+    if not payee:
+        raise HTTPException(status_code=404, detail="Payee not found")
+
+    transactions = db.query(Transaction).filter(
+        Transaction.payee_raw.isnot(None)
+    ).all()
+
+    matches = {
+        tx.payee_raw
+        for tx in transactions
+        if tx.payee_raw and matches_payee(payee, tx.payee_raw)
+    }
+
+    return sorted(matches, key=lambda value: value.lower())
+
+
+@router.post("/preview-matches", response_model=list[str])
+def preview_payee_matches(payee: PayeeCreate, db: Session = Depends(get_db)):
+    """Preview distinct raw payees that would match the provided patterns."""
+    transactions = db.query(Transaction).filter(
+        Transaction.payee_raw.isnot(None)
+    ).all()
+
+    matches = {
+        tx.payee_raw
+        for tx in transactions
+        if tx.payee_raw and matches_patterns(
+            [p.model_dump() for p in payee.match_patterns],
+            tx.payee_raw
+        )
+    }
+
+    return sorted(matches, key=lambda value: value.lower())

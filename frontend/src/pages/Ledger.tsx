@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { format, startOfMonth, addMonths, subMonths, parseISO } from 'date-fns'
 import { useAccount } from '../hooks/useAccounts'
 import {
@@ -8,6 +8,7 @@ import {
   useUpdateTransaction,
   useDeleteTransaction
 } from '../hooks/useTransactions'
+import { useCreatePayee } from '../hooks/usePayees'
 import { Transaction } from '../api/client'
 import { formatCurrency, parseCurrency } from '../utils/format'
 import ImportModal from '../components/ImportModal'
@@ -43,6 +44,7 @@ const TYPE_COLORS: Record<TxType, string> = {
 export default function Ledger() {
   const { accountId } = useParams<{ accountId: string }>()
   const id = Number(accountId)
+  const navigate = useNavigate()
 
   const [currentDate, setCurrentDate] = useState(() => startOfMonth(new Date()))
   const [showImport, setShowImport] = useState(false)
@@ -61,6 +63,7 @@ export default function Ledger() {
   const createMutation = useCreateTransaction()
   const updateMutation = useUpdateTransaction()
   const deleteMutation = useDeleteTransaction()
+  const createPayeeMutation = useCreatePayee()
 
   // Sort transactions
   const sorted = useMemo(() => {
@@ -116,6 +119,21 @@ export default function Ledger() {
     } else {
       setSortField(field)
       setSortDir('asc')
+    }
+  }
+
+  const handleAddPayee = async (tx: Transaction) => {
+    const rawPayee = tx.payee_raw || tx.display_name
+    if (!rawPayee) return
+    try {
+      await createPayeeMutation.mutateAsync({
+        name: tx.display_name || rawPayee,
+        match_patterns: [{ type: 'exact', pattern: rawPayee }]
+      })
+      navigate('/payees')
+    } catch (error) {
+      console.error('Failed to create payee', error)
+      window.alert('Failed to create payee. Check the console for details.')
     }
   }
 
@@ -285,6 +303,7 @@ export default function Ledger() {
                     runningBalance={balanceMap.get(tx.id) ?? 0}
                     onEdit={() => setEditingId(tx.id)}
                     onDelete={() => handleDelete(tx.id)}
+                    onAddPayee={() => handleAddPayee(tx)}
                   />
                 )
               )}
@@ -327,13 +346,15 @@ interface TransactionRowProps {
   runningBalance: number
   onEdit: () => void
   onDelete: () => void
+  onAddPayee: () => void
 }
 
 function TransactionRow({
   transaction: tx,
   runningBalance,
   onEdit,
-  onDelete
+  onDelete,
+  onAddPayee
 }: TransactionRowProps) {
   const isForecast = tx.transaction_type === 'forecast'
 
@@ -372,6 +393,21 @@ function TransactionRow({
       </td>
       <td className="px-4 py-1 text-right">
         <div className="invisible group-hover:visible flex justify-end gap-1">
+          <button
+            onClick={onAddPayee}
+            disabled={!tx.payee_raw && !tx.display_name}
+            className="p-1 text-gray-400 hover:text-emerald-600 rounded disabled:opacity-40"
+            title="Add payee rule"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
           <button
             onClick={onEdit}
             className="p-1 text-gray-400 hover:text-blue-600 rounded"

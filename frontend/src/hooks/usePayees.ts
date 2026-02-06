@@ -61,3 +61,17 @@ export function useRematchPayees() {
     }
   })
 }
+
+export function usePayeeMatches(payeeId: number) {
+  return useQuery({
+    queryKey: ['payee-matches', payeeId],
+    queryFn: () => api.get<string[]>(`/payees/${payeeId}/matches`)
+  })
+}
+
+export function usePreviewPayeeMatches() {
+  return useMutation({
+    mutationFn: (data: { name: string; match_patterns: MatchPattern[] }) =>
+      api.post<string[]>('/payees/preview-matches', data)
+  })
+}

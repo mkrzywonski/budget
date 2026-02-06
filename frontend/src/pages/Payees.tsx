@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   usePayees,
   useCreatePayee,
   useUpdatePayee,
   useDeletePayee,
-  useRematchPayees
+  useRematchPayees,
+  usePayeeMatches,
+  usePreviewPayeeMatches
 } from '../hooks/usePayees'
 import { Payee, MatchPattern } from '../api/client'
 
@@ -170,10 +172,33 @@ function PayeeCard({
         </div>
       </div>
 
-      {/* Recurring transactions stub */}
-      <div className="mt-3 pt-3 border-t">
-        <span className="text-xs text-gray-400">Recurring transactions — coming soon</span>
-      </div>
+      <PayeeMatches payeeId={payee.id} />
+    </div>
+  )
+}
+
+function PayeeMatches({ payeeId }: { payeeId: number }) {
+  const { data: matches, isLoading } = usePayeeMatches(payeeId)
+
+  return (
+    <div className="mt-3 pt-3 border-t">
+      <div className="text-xs text-gray-500 mb-2">Matched raw payees</div>
+      {isLoading ? (
+        <div className="text-xs text-gray-400">Loading matches...</div>
+      ) : !matches || matches.length === 0 ? (
+        <div className="text-xs text-gray-400">No matches yet</div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {matches.map((value) => (
+            <span
+              key={value}
+              className="inline-flex items-center px-2 py-1 bg-gray-100 text-xs rounded font-mono text-gray-700"
+            >
+              {value}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -195,6 +220,9 @@ function PayeeForm({
   const [patterns, setPatterns] = useState<MatchPattern[]>(
     payee?.match_patterns?.length ? payee.match_patterns : [{ ...EMPTY_PATTERN }]
   )
+  const [previewMatches, setPreviewMatches] = useState<string[] | null>(null)
+  const [isPreviewing, setIsPreviewing] = useState(false)
+  const previewMutation = usePreviewPayeeMatches()
 
   const updatePattern = (index: number, field: keyof MatchPattern, value: string) => {
     setPatterns((prev) =>
@@ -211,6 +239,33 @@ function PayeeForm({
   const removePattern = (index: number) => {
     setPatterns((prev) => prev.filter((_, i) => i !== index))
   }
+
+  const hasAnyPattern = patterns.some((p) => p.pattern.trim().length > 0)
+
+  useEffect(() => {
+    if (!hasAnyPattern) {
+      setPreviewMatches(null)
+      return
+    }
+
+    const handle = setTimeout(async () => {
+      setIsPreviewing(true)
+      try {
+        const results = await previewMutation.mutateAsync({
+          name: name || 'Preview',
+          match_patterns: patterns
+        })
+        setPreviewMatches(results)
+      } catch (error) {
+        console.error('Failed to preview matches', error)
+        setPreviewMatches(null)
+      } finally {
+        setIsPreviewing(false)
+      }
+    }, 300)
+
+    return () => clearTimeout(handle)
+  }, [name, patterns, hasAnyPattern])
 
   const handleSubmit = () => {
     if (!name.trim()) return
@@ -295,6 +350,28 @@ function PayeeForm({
           >
             + Add another pattern
           </button>
+        </div>
+
+        <div className="border-t pt-3">
+          <div className="text-xs text-gray-500 mb-2">Preview matching payees</div>
+          {!hasAnyPattern ? (
+            <div className="text-xs text-gray-400">Enter a pattern to see matches</div>
+          ) : isPreviewing ? (
+            <div className="text-xs text-gray-400">Matching...</div>
+          ) : !previewMatches || previewMatches.length === 0 ? (
+            <div className="text-xs text-gray-400">No matches</div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {previewMatches.map((value) => (
+                <span
+                  key={value}
+                  className="inline-flex items-center px-2 py-1 bg-gray-100 text-xs rounded font-mono text-gray-700"
+                >
+                  {value}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Actions */}
