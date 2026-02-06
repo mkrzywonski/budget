@@ -123,3 +123,28 @@ def rematch_all(db: Session) -> int:
             updated += 1
 
     return updated
+
+
+def rematch_payee(db: Session, payee: Payee) -> int:
+    """
+    Re-run payee matching for a single payee across all transactions.
+
+    Updates display_name to this payee's name when patterns match,
+    and clears it when this payee was previously set but no longer matches.
+    Returns the number of transactions updated.
+    """
+    transactions = db.query(Transaction).filter(
+        Transaction.payee_raw.isnot(None)
+    ).all()
+
+    updated = 0
+    for tx in transactions:
+        should_match = matches_payee(payee, tx.payee_raw)
+        if should_match and tx.display_name != payee.name:
+            tx.display_name = payee.name
+            updated += 1
+        elif not should_match and tx.display_name == payee.name:
+            tx.display_name = None
+            updated += 1
+
+    return updated

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Payee, Transaction
 from ..schemas.payee import PayeeCreate, PayeeUpdate, PayeeResponse, RematchResponse
-from ..services.payee_matcher import rematch_all, matches_payee, matches_patterns
+from ..services.payee_matcher import rematch_all, matches_payee, matches_patterns, rematch_payee
 
 router = APIRouter()
 
@@ -78,6 +78,16 @@ def delete_payee(payee_id: int, db: Session = Depends(get_db)):
 def rematch_payees(db: Session = Depends(get_db)):
     """Re-run payee matching on all transactions."""
     updated_count = rematch_all(db)
+    return RematchResponse(updated_count=updated_count)
+
+
+@router.post("/{payee_id}/rematch", response_model=RematchResponse)
+def rematch_single_payee(payee_id: int, db: Session = Depends(get_db)):
+    """Re-run payee matching for a single payee."""
+    payee = db.query(Payee).filter(Payee.id == payee_id).first()
+    if not payee:
+        raise HTTPException(status_code=404, detail="Payee not found")
+    updated_count = rematch_payee(db, payee)
     return RematchResponse(updated_count=updated_count)
 
 

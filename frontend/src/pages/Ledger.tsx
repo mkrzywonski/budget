@@ -65,6 +65,17 @@ export default function Ledger() {
   const deleteMutation = useDeleteTransaction()
   const createPayeeMutation = useCreatePayee()
 
+  const entryDefaultDate = useMemo(() => {
+    if (!transactions || transactions.length === 0) {
+      return format(currentDate, 'yyyy-MM-dd')
+    }
+    const latest = transactions
+      .map((tx) => tx.posted_date)
+      .sort()
+      .slice(-1)[0]
+    return latest || format(currentDate, 'yyyy-MM-dd')
+  }, [transactions, currentDate])
+
   // Sort transactions
   const sorted = useMemo(() => {
     if (!transactions) return []
@@ -309,7 +320,7 @@ export default function Ledger() {
               )}
               {/* Entry row */}
               <EntryRow
-                defaultDate={format(currentDate, 'yyyy-MM-dd')}
+                defaultDate={entryDefaultDate}
                 defaultType={lastType}
                 onSubmit={handleCreate}
                 isPending={createMutation.isPending}

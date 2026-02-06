@@ -6,7 +6,7 @@ import {
   useUpdatePayee,
   useDeletePayee,
   useRematchPayees,
-  usePayeeMatches,
+  useRematchPayee,
   usePreviewPayeeMatches
 } from '../hooks/usePayees'
 import { Payee, MatchPattern } from '../api/client'
@@ -28,6 +28,7 @@ export default function Payees() {
   const updateMutation = useUpdatePayee()
   const deleteMutation = useDeletePayee()
   const rematchMutation = useRematchPayees()
+  const rematchPayeeMutation = useRematchPayee()
 
   const [showAdd, setShowAdd] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -106,11 +107,12 @@ export default function Payees() {
                   key={payee.id}
                   payee={payee}
                   onSave={async (name, patterns) => {
-                    await updateMutation.mutateAsync({
+                    const updated = await updateMutation.mutateAsync({
                       id: payee.id,
                       name,
                       match_patterns: patterns
                     })
+                    await rematchPayeeMutation.mutateAsync(updated.id)
                     setEditingId(null)
                   }}
                   onCancel={() => setEditingId(null)}
@@ -184,33 +186,6 @@ function PayeeCard({
         </div>
       </div>
 
-      <PayeeMatches payeeId={payee.id} />
-    </div>
-  )
-}
-
-function PayeeMatches({ payeeId }: { payeeId: number }) {
-  const { data: matches, isLoading } = usePayeeMatches(payeeId)
-
-  return (
-    <div className="mt-3 pt-3 border-t">
-      <div className="text-xs text-gray-500 mb-2">Matched raw payees</div>
-      {isLoading ? (
-        <div className="text-xs text-gray-400">Loading matches...</div>
-      ) : !matches || matches.length === 0 ? (
-        <div className="text-xs text-gray-400">No matches yet</div>
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          {matches.map((value) => (
-            <span
-              key={value}
-              className="inline-flex items-center px-2 py-1 bg-gray-100 text-xs rounded font-mono text-gray-700"
-            >
-              {value}
-            </span>
-          ))}
-        </div>
-      )}
     </div>
   )
 }

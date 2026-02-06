@@ -62,6 +62,19 @@ export function useRematchPayees() {
   })
 }
 
+export function useRematchPayee() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payeeId: number) =>
+      api.post<{ updated_count: number }>(`/payees/${payeeId}/rematch`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payees'] })
+      queryClient.invalidateQueries({ queryKey: ['transactions'] })
+    }
+  })
+}
+
 export function usePayeeMatches(payeeId: number) {
   return useQuery({
     queryKey: ['payee-matches', payeeId],

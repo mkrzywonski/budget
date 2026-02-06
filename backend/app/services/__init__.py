@@ -6,6 +6,7 @@ from .payee_matcher import (
     rematch_all,
     matches_payee,
     matches_patterns,
+    rematch_payee,
 )
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "rematch_all",
     "matches_payee",
     "matches_patterns",
+    "rematch_payee",
 ]
