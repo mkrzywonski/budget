@@ -262,17 +262,17 @@ export default function ImportModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 bg-overlay flex items-center justify-center p-4 z-50">
+      <div className="bg-surface rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b flex justify-between items-center">
           <div>
             <h2 className="text-xl font-semibold">Import Transactions</h2>
-            <p className="text-sm text-gray-500">{accountName}</p>
+            <p className="text-sm text-content-secondary">{accountName}</p>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-2xl"
+            className="text-content-tertiary hover:text-content-secondary text-2xl"
           >
             ×
           </button>
@@ -333,7 +333,7 @@ export default function ImportModal({
             {step !== 'upload' && step !== 'complete' && (
               <button
                 onClick={() => setStep(step === 'preview' ? (fileType === 'ofx' ? 'upload' : 'mapping') : 'upload')}
-                className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+                className="px-4 py-2 border border-border-strong rounded hover:bg-hover"
               >
                 Back
               </button>
@@ -402,10 +402,10 @@ function UploadStep({
   return (
     <div className="space-y-6">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-content mb-2">
           Select File
         </label>
-        <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+        <div className="border-2 border-dashed border-input-border rounded-lg p-8 text-center">
           <input
             type="file"
             accept=".csv,.txt,.ofx,.qfx"
@@ -419,7 +419,7 @@ function UploadStep({
           >
             {fileName || 'Click to select a file'}
           </label>
-          <p className="text-xs text-gray-400 mt-2">CSV, OFX, or QFX</p>
+          <p className="text-xs text-content-tertiary mt-2">CSV, OFX, or QFX</p>
         </div>
       </div>
 
@@ -431,7 +431,7 @@ function UploadStep({
             onChange={(e) => onUseSavedSettingsChange(e.target.checked)}
             className="rounded"
           />
-          <span className="text-sm text-gray-700">Use saved import settings</span>
+          <span className="text-sm text-content">Use saved import settings</span>
         </label>
       )}
     </div>
@@ -474,11 +474,11 @@ function MappingStep({
   return (
     <div className="space-y-6">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">File Preview</label>
-        <pre className="bg-gray-50 border border-gray-200 rounded p-3 text-xs font-mono overflow-x-auto max-h-40 leading-relaxed">
+        <label className="block text-sm font-medium text-content mb-2">File Preview</label>
+        <pre className="bg-surface-secondary border border-border rounded p-3 text-xs font-mono overflow-x-auto max-h-40 leading-relaxed">
           {rawPreviewLines.map((line, i) => (
-            <div key={i} className={clsx(i < skipRows && 'text-gray-400 line-through')}>
-              <span className="text-gray-400 select-none mr-3">{i + 1}</span>{line}
+            <div key={i} className={clsx(i < skipRows && 'text-content-tertiary line-through')}>
+              <span className="text-content-tertiary select-none mr-3">{i + 1}</span>{line}
             </div>
           ))}
         </pre>
@@ -486,13 +486,13 @@ function MappingStep({
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-content mb-1">
             Delimiter
           </label>
           <select
             value={delimiter}
             onChange={(e) => onDelimiterChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded"
+            className="w-full px-3 py-2 border border-input-border rounded bg-input"
           >
             <option value=",">Comma (,)</option>
             <option value=";">Semicolon (;)</option>
@@ -500,7 +500,7 @@ function MappingStep({
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-content mb-1">
             Skip Rows
           </label>
           <input
@@ -508,7 +508,7 @@ function MappingStep({
             min="0"
             value={skipRows}
             onChange={(e) => onSkipRowsChange(Number(e.target.value))}
-            className="w-full px-3 py-2 border border-gray-300 rounded"
+            className="w-full px-3 py-2 border border-input-border rounded bg-input"
           />
         </div>
       </div>
@@ -520,34 +520,34 @@ function MappingStep({
           onChange={(e) => onHasHeaderChange(e.target.checked)}
           className="rounded"
         />
-        <span className="text-sm text-gray-700">First row is a header</span>
+        <span className="text-sm text-content">First row is a header</span>
       </label>
 
       {isParsing && (
-        <p className="text-sm text-gray-500">Re-detecting columns...</p>
+        <p className="text-sm text-content-secondary">Re-detecting columns...</p>
       )}
 
       <div className="border-t pt-4">
-      <p className="text-sm text-gray-600 mb-4">
+      <p className="text-sm text-content-secondary mb-4">
         Map columns from your CSV file to transaction fields.
       </p>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-content mb-1">
             Date Column *
           </label>
           <select
             value={mappings.date}
             onChange={(e) => onMappingsChange({ ...mappings, date: Number(e.target.value) })}
-            className="w-full px-3 py-2 border border-gray-300 rounded"
+            className="w-full px-3 py-2 border border-input-border rounded bg-input"
           >
             {columnOptions}
           </select>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-content mb-1">
             Payee/Description Column
           </label>
           <select
@@ -556,7 +556,7 @@ function MappingStep({
               ...mappings,
               payee: e.target.value ? Number(e.target.value) : undefined
             })}
-            className="w-full px-3 py-2 border border-gray-300 rounded"
+            className="w-full px-3 py-2 border border-input-border rounded bg-input"
           >
             <option value="">— None —</option>
             {columnOptions}
@@ -564,7 +564,7 @@ function MappingStep({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-content mb-1">
             Memo Column
           </label>
           <select
@@ -573,7 +573,7 @@ function MappingStep({
               ...mappings,
               memo: e.target.value ? Number(e.target.value) : undefined
             })}
-            className="w-full px-3 py-2 border border-gray-300 rounded"
+            className="w-full px-3 py-2 border border-input-border rounded bg-input"
           >
             <option value="">— None —</option>
             {columnOptions}
@@ -587,7 +587,7 @@ function MappingStep({
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-content mb-1">
               Amount Type
             </label>
             <select
@@ -596,7 +596,7 @@ function MappingStep({
                 ...amountConfig,
                 type: e.target.value as 'single' | 'split'
               })}
-              className="w-full px-3 py-2 border border-gray-300 rounded"
+              className="w-full px-3 py-2 border border-input-border rounded bg-input"
             >
               <option value="single">Single Amount Column</option>
               <option value="split">Separate Debit/Credit Columns</option>
@@ -606,7 +606,7 @@ function MappingStep({
           {amountConfig.type === 'single' ? (
             <>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-content mb-1">
                   Amount Column
                 </label>
                 <select
@@ -615,7 +615,7 @@ function MappingStep({
                     ...amountConfig,
                     column: Number(e.target.value)
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded"
+                  className="w-full px-3 py-2 border border-input-border rounded bg-input"
                 >
                   {columnOptions}
                 </select>
@@ -630,7 +630,7 @@ function MappingStep({
                   })}
                   className="rounded"
                 />
-                <span className="text-sm text-gray-700">
+                <span className="text-sm text-content">
                   Negate amounts (expenses are positive in file)
                 </span>
               </label>
@@ -638,7 +638,7 @@ function MappingStep({
           ) : (
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-content mb-1">
                   Debit Column (expenses)
                 </label>
                 <select
@@ -647,13 +647,13 @@ function MappingStep({
                     ...amountConfig,
                     debit_column: Number(e.target.value)
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded"
+                  className="w-full px-3 py-2 border border-input-border rounded bg-input"
                 >
                   {columnOptions}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-content mb-1">
                   Credit Column (income)
                 </label>
                 <select
@@ -662,7 +662,7 @@ function MappingStep({
                     ...amountConfig,
                     credit_column: Number(e.target.value)
                   })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded"
+                  className="w-full px-3 py-2 border border-input-border rounded bg-input"
                 >
                   {columnOptions}
                 </select>
@@ -741,7 +741,7 @@ function PreviewStep({
           </div>
           <div className="border rounded max-h-48 overflow-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 sticky top-0">
+              <thead className="bg-surface-secondary sticky top-0">
                 <tr>
                   <th className="px-3 py-2 text-left w-12">Import?</th>
                   <th className="px-3 py-2 text-left">Date</th>
@@ -749,12 +749,12 @@ function PreviewStep({
                   <th className="px-3 py-2 text-right">Amount</th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody className="divide-y divide-border">
                 {preview.duplicates.map((dup) => (
                   <tr
                     key={dup.fingerprint}
                     className={clsx(
-                      'hover:bg-gray-50',
+                      'hover:bg-hover',
                       acceptedDuplicates.has(dup.parsed.row_index) && 'bg-green-50'
                     )}
                   >
@@ -786,7 +786,7 @@ function PreviewStep({
         <h3 className="font-medium mb-2">New Transactions</h3>
         <div className="border rounded max-h-64 overflow-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 sticky top-0">
+            <thead className="bg-surface-secondary sticky top-0">
               <tr>
                 <th className="px-3 py-2 text-left">Date</th>
                 <th className="px-3 py-2 text-left">Payee</th>
@@ -794,14 +794,14 @@ function PreviewStep({
                 <th className="px-3 py-2 text-right">Amount</th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y divide-border">
               {preview.new_transactions.slice(0, 50).map((tx) => (
-                <tr key={tx.row_index} className="hover:bg-gray-50">
+                <tr key={tx.row_index} className="hover:bg-hover">
                   <td className="px-3 py-2">
                     {format(new Date(tx.posted_date), 'MM/dd/yyyy')}
                   </td>
                   <td className="px-3 py-2">{tx.payee_raw || '—'}</td>
-                  <td className="px-3 py-2 text-gray-500 truncate max-w-xs">
+                  <td className="px-3 py-2 text-content-secondary truncate max-w-xs">
                     {tx.memo || ''}
                   </td>
                   <td className={clsx(
@@ -815,7 +815,7 @@ function PreviewStep({
             </tbody>
           </table>
           {preview.new_transactions.length > 50 && (
-            <div className="px-3 py-2 text-sm text-gray-500 bg-gray-50">
+            <div className="px-3 py-2 text-sm text-content-secondary bg-surface-secondary">
               ... and {preview.new_transactions.length - 50} more
             </div>
           )}
@@ -832,7 +832,7 @@ function PreviewStep({
               onChange={(e) => onSaveSettingsChange(e.target.checked)}
               className="rounded"
             />
-            <span className="text-sm text-gray-700">
+            <span className="text-sm text-content">
               Save these import settings for next time
             </span>
           </label>
@@ -862,7 +862,7 @@ function CompleteStep({ result }: { result: { imported_count: number; skipped_co
     <div className="text-center py-8">
       <div className="text-6xl mb-4">✓</div>
       <h3 className="text-xl font-semibold mb-2">Import Complete</h3>
-      <p className="text-gray-600">
+      <p className="text-content-secondary">
         Successfully imported {result.imported_count} transactions.
         {result.skipped_count > 0 && ` (${result.skipped_count} skipped as duplicates)`}
       </p>

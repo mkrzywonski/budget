@@ -23,16 +23,16 @@ export default function BookPicker() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">
+    <div className="min-h-screen bg-surface-secondary flex items-center justify-center p-4">
+      <div className="bg-surface rounded-lg shadow-lg max-w-md w-full p-6">
+        <h1 className="text-2xl font-bold text-content mb-6">
           Personal Finance Ledger
         </h1>
 
         {/* Recent Books */}
         {!isLoading && recentBooks && recentBooks.length > 0 && (
           <div className="mb-6">
-            <h2 className="text-sm font-semibold text-gray-700 mb-2">
+            <h2 className="text-sm font-semibold text-content mb-2">
               Recent Books
             </h2>
             <div className="space-y-2">
@@ -41,10 +41,10 @@ export default function BookPicker() {
                   key={book.path}
                   onClick={() => handleOpen(book.path, book.name)}
                   disabled={openBook.isPending}
-                  className="w-full text-left px-4 py-3 rounded border border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-colors"
+                  className="w-full text-left px-4 py-3 rounded border border-border hover:border-blue-500 hover:bg-blue-50 transition-colors"
                 >
-                  <div className="font-medium text-gray-900">{book.name}</div>
-                  <div className="text-sm text-gray-500 truncate">{book.path}</div>
+                  <div className="font-medium text-content">{book.name}</div>
+                  <div className="text-sm text-content-secondary truncate">{book.path}</div>
                 </button>
               ))}
             </div>
@@ -55,7 +55,7 @@ export default function BookPicker() {
         {showCreate ? (
           <form onSubmit={handleCreate} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-content mb-1">
                 File Path
               </label>
               <input
@@ -63,11 +63,11 @@ export default function BookPicker() {
                 value={newPath}
                 onChange={(e) => setNewPath(e.target.value)}
                 placeholder="/home/user/budget.db"
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-input-border rounded bg-input focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-content mb-1">
                 Display Name (optional)
               </label>
               <input
@@ -75,7 +75,7 @@ export default function BookPicker() {
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="My Budget"
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-input-border rounded bg-input focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
             <div className="flex gap-2">
@@ -89,7 +89,7 @@ export default function BookPicker() {
               <button
                 type="button"
                 onClick={() => setShowCreate(false)}
-                className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+                className="px-4 py-2 border border-border-strong rounded hover:bg-hover"
               >
                 Cancel
               </button>

@@ -52,7 +52,15 @@ export default function Ledger() {
   const id = Number(accountId)
   const navigate = useNavigate()
 
-  const [currentDate, setCurrentDate] = useState(() => startOfMonth(new Date()))
+  const [currentDate, setCurrentDate] = useState(() => {
+    const saved = sessionStorage.getItem('ledger-month')
+    return saved ? startOfMonth(parseISO(saved)) : startOfMonth(new Date())
+  })
+
+  // Persist selected month across navigation
+  useEffect(() => {
+    sessionStorage.setItem('ledger-month', format(currentDate, 'yyyy-MM-dd'))
+  }, [currentDate])
   const [showImport, setShowImport] = useState(false)
   const [sortField, setSortField] = useState<SortField>('posted_date')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
@@ -249,14 +257,14 @@ export default function Ledger() {
   const goToToday = () => setCurrentDate(startOfMonth(new Date()))
 
   const sortIndicator = (field: SortField) => {
-    if (sortField !== field) return <span className="text-gray-300 ml-1">↕</span>
+    if (sortField !== field) return <span className="text-content-tertiary ml-1">↕</span>
     return <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>
   }
 
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="bg-white border-b px-6 py-4">
+      <div className="bg-surface border-b px-6 py-4">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-4">
             <h1 className="text-xl font-semibold">
@@ -272,19 +280,19 @@ export default function Ledger() {
           <div className="flex items-center gap-2">
             <button
               onClick={prevMonth}
-              className="p-2 hover:bg-gray-100 rounded"
+              className="p-2 hover:bg-hover rounded"
             >
               ←
             </button>
             <button
               onClick={goToToday}
-              className="px-3 py-1 text-sm font-medium"
+              className="px-3 py-1 text-sm font-medium w-36 text-center"
             >
               {format(currentDate, 'MMMM yyyy')}
             </button>
             <button
               onClick={nextMonth}
-              className="p-2 hover:bg-gray-100 rounded"
+              className="p-2 hover:bg-hover rounded"
             >
               →
             </button>
@@ -305,43 +313,43 @@ export default function Ledger() {
       {/* Transaction Table */}
       <div className="flex-1 overflow-auto">
         {isLoading ? (
-          <div className="p-6 text-gray-500">Loading transactions...</div>
+          <div className="p-6 text-content-secondary">Loading transactions...</div>
         ) : (
           <table className="w-full">
-            <thead className="bg-gray-50 sticky top-0">
-              <tr className="text-left text-sm text-gray-500">
+            <thead className="bg-surface-secondary sticky top-0">
+              <tr className="text-left text-sm text-content-secondary">
                 <th
-                  className="px-4 py-2 w-28 cursor-pointer select-none hover:text-gray-700"
+                  className="px-4 py-2 w-28 cursor-pointer select-none hover:text-content"
                   onClick={() => handleSort('posted_date')}
                 >
                   Date{sortIndicator('posted_date')}
                 </th>
                 <th
-                  className="px-4 py-2 w-24 cursor-pointer select-none hover:text-gray-700"
+                  className="px-4 py-2 w-24 cursor-pointer select-none hover:text-content"
                   onClick={() => handleSort('type')}
                 >
                   Type{sortIndicator('type')}
                 </th>
                 <th
-                  className="px-4 py-2 cursor-pointer select-none hover:text-gray-700"
+                  className="px-4 py-2 cursor-pointer select-none hover:text-content"
                   onClick={() => handleSort('payee')}
                 >
                   Payee{sortIndicator('payee')}
                 </th>
                 <th
-                  className="px-4 py-2 cursor-pointer select-none hover:text-gray-700"
+                  className="px-4 py-2 cursor-pointer select-none hover:text-content"
                   onClick={() => handleSort('category')}
                 >
                   Category{sortIndicator('category')}
                 </th>
                 <th
-                  className="px-4 py-2 cursor-pointer select-none hover:text-gray-700"
+                  className="px-4 py-2 cursor-pointer select-none hover:text-content"
                   onClick={() => handleSort('memo')}
                 >
                   Memo{sortIndicator('memo')}
                 </th>
                 <th
-                  className="px-4 py-2 text-right w-28 cursor-pointer select-none hover:text-gray-700"
+                  className="px-4 py-2 text-right w-28 cursor-pointer select-none hover:text-content"
                   onClick={() => handleSort('amount_cents')}
                 >
                   Amount{sortIndicator('amount_cents')}
@@ -350,12 +358,12 @@ export default function Ledger() {
                 <th className="px-4 py-2 w-24"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-border">
               {sorted.length === 0 && (
                 <tr>
                   <td
                     colSpan={showBalance ? 8 : 7}
-                    className="px-4 py-8 text-center text-gray-500"
+                    className="px-4 py-8 text-center text-content-secondary"
                   >
                     No transactions this month
                   </td>
@@ -407,10 +415,10 @@ export default function Ledger() {
       </div>
 
       {/* Footer with totals */}
-      <div className="bg-gray-50 border-t px-6 py-3">
+      <div className="bg-surface-secondary border-t px-6 py-3">
         <div className="flex justify-end gap-8 text-sm">
           <div>
-            <span className="text-gray-500">Month Total: </span>
+            <span className="text-content-secondary">Month Total: </span>
             <span className="font-medium">
               {formatCurrency(
                 (transactions || []).reduce(
@@ -470,7 +478,7 @@ function TransactionRow({
   return (
     <tr
       className={clsx(
-        'group hover:bg-gray-50',
+        'group hover:bg-hover',
         isForecast && 'row-forecast'
       )}
     >
@@ -487,7 +495,7 @@ function TransactionRow({
         {tx.display_name || tx.payee_raw || '—'}
         {contextMenu && (
           <div
-            className="fixed z-50 bg-white border border-gray-200 rounded shadow-lg py-1 min-w-[160px]"
+            className="fixed z-50 bg-white dark:bg-gray-800 border border-border rounded shadow-lg py-1 min-w-[160px]"
             style={{ left: contextMenu.x, top: contextMenu.y }}
           >
             <button
@@ -496,14 +504,14 @@ function TransactionRow({
                 setContextMenu(null)
                 onAddPayee()
               }}
-              className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100"
+              className="w-full text-left px-3 py-1.5 text-sm hover:bg-hover"
             >
               Create payee rule
             </button>
           </div>
         )}
       </td>
-      <td className="px-4 py-2 text-sm text-gray-500">
+      <td className="px-4 py-2 text-sm text-content-secondary">
         {tx.transaction_type === 'transfer' ? (
           '—'
         ) : tx.category_id ? (
@@ -514,7 +522,7 @@ function TransactionRow({
             onChange={(e) => {
               if (e.target.value) onCategorize(Number(e.target.value))
             }}
-            className="w-full px-1 py-0.5 text-sm border border-gray-200 rounded bg-transparent text-gray-400 hover:border-gray-400 cursor-pointer"
+            className="w-full px-1 py-0.5 text-sm border border-border rounded bg-transparent text-content-tertiary hover:border-border-strong cursor-pointer"
           >
             <option value="">—</option>
             {categories.filter((c) => !c.parent_id).map((parent) => (
@@ -528,7 +536,7 @@ function TransactionRow({
           </select>
         )}
       </td>
-      <td className="px-4 py-2 text-sm text-gray-500 truncate max-w-xs">
+      <td className="px-4 py-2 text-sm text-content-secondary truncate max-w-xs">
         {tx.memo || ''}
       </td>
       <td
@@ -548,7 +556,7 @@ function TransactionRow({
         <div className="invisible group-hover:visible flex justify-end gap-1">
           <button
             onClick={onEdit}
-            className="p-1 text-gray-400 hover:text-blue-600 rounded"
+            className="p-1 text-content-tertiary hover:text-blue-600 rounded"
             title="Edit"
           >
             <svg
@@ -567,7 +575,7 @@ function TransactionRow({
           </button>
           <button
             onClick={onDelete}
-            className="p-1 text-gray-400 hover:text-red-600 rounded"
+            className="p-1 text-content-tertiary hover:text-red-600 rounded"
             title="Delete"
           >
             <svg
@@ -585,7 +593,7 @@ function TransactionRow({
             </svg>
           </button>
           <button
-            className="p-1 text-gray-400 hover:text-purple-600 rounded"
+            className="p-1 text-content-tertiary hover:text-purple-600 rounded"
             title="Recurrence"
             disabled
           >
@@ -696,14 +704,14 @@ function EditRow({ transaction: tx, categories, accounts, currentAccountId, show
 
   return (
     <>
-    <tr className="bg-blue-50">
+    <tr className="bg-blue-50 dark:bg-blue-950">
       <td className="px-4 py-1">
         <input
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="w-full px-1 py-1 text-sm border border-gray-300 rounded"
+          className="w-full px-1 py-1 text-sm border border-input-border rounded bg-input"
         />
       </td>
       <td className="px-4 py-1">
@@ -713,7 +721,7 @@ function EditRow({ transaction: tx, categories, accounts, currentAccountId, show
           <select
             value={type}
             onChange={(e) => setType(e.target.value as TxType)}
-            className="w-full px-1 py-1 text-sm border border-gray-300 rounded"
+            className="w-full px-1 py-1 text-sm border border-input-border rounded bg-input"
           >
             <option value="debit">Debit</option>
             <option value="credit">Credit</option>
@@ -732,7 +740,7 @@ function EditRow({ transaction: tx, categories, accounts, currentAccountId, show
             <select
               value={transferAccountId ?? ''}
               onChange={(e) => setTransferAccountId(e.target.value ? Number(e.target.value) : null)}
-              className="flex-1 px-1 py-1 text-sm border border-gray-300 rounded"
+              className="flex-1 px-1 py-1 text-sm border border-input-border rounded bg-input"
             >
               <option value="">Select account...</option>
               {otherAccounts.map(a => (
@@ -746,18 +754,18 @@ function EditRow({ transaction: tx, categories, accounts, currentAccountId, show
             value={payee}
             onChange={(e) => setPayee(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+            className="w-full px-2 py-1 text-sm border border-input-border rounded bg-input"
           />
         )}
       </td>
       <td className="px-4 py-1">
         {type === 'transfer' ? (
-          <span className="text-sm text-gray-400 px-1">—</span>
+          <span className="text-sm text-content-tertiary px-1">—</span>
         ) : (
           <select
             value={categoryId ?? ''}
             onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : null)}
-            className="w-full px-1 py-1 text-sm border border-gray-300 rounded"
+            className="w-full px-1 py-1 text-sm border border-input-border rounded bg-input"
           >
             <option value="">—</option>
             {categories.filter((c) => !c.parent_id).map((parent) => (
@@ -777,7 +785,7 @@ function EditRow({ transaction: tx, categories, accounts, currentAccountId, show
           value={memo}
           onChange={(e) => setMemo(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+          className="w-full px-2 py-1 text-sm border border-input-border rounded bg-input"
         />
       </td>
       <td className="px-4 py-1">
@@ -786,7 +794,7 @@ function EditRow({ transaction: tx, categories, accounts, currentAccountId, show
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="w-full px-2 py-1 text-sm text-right font-mono border border-gray-300 rounded"
+          className="w-full px-2 py-1 text-sm text-right font-mono border border-input-border rounded bg-input"
         />
       </td>
       {showBalance && <td className="px-4 py-1"></td>}
@@ -813,7 +821,7 @@ function EditRow({ transaction: tx, categories, accounts, currentAccountId, show
           </button>
           <button
             onClick={onCancel}
-            className="p-1 text-gray-400 hover:text-gray-600 rounded"
+            className="p-1 text-content-tertiary hover:text-content-secondary rounded"
             title="Cancel"
           >
             <svg
@@ -834,7 +842,7 @@ function EditRow({ transaction: tx, categories, accounts, currentAccountId, show
       </td>
     </tr>
     {transferMatch && !deleteMatchId && (
-      <tr className="bg-yellow-50">
+      <tr className="bg-yellow-50 dark:bg-yellow-950">
         <td colSpan={showBalance ? 8 : 7} className="px-4 py-2 text-sm">
           <div className="flex items-center justify-between">
             <span>
@@ -853,7 +861,7 @@ function EditRow({ transaction: tx, categories, accounts, currentAccountId, show
               </button>
               <button
                 onClick={() => setTransferMatch(null)}
-                className="px-2 py-0.5 text-xs border border-gray-300 rounded hover:bg-gray-100"
+                className="px-2 py-0.5 text-xs border border-border-strong rounded hover:bg-hover"
               >
                 No
               </button>
@@ -863,7 +871,7 @@ function EditRow({ transaction: tx, categories, accounts, currentAccountId, show
       </tr>
     )}
     {deleteMatchId && (
-      <tr className="bg-green-50">
+      <tr className="bg-green-50 dark:bg-green-950">
         <td colSpan={showBalance ? 8 : 7} className="px-4 py-2 text-sm text-green-700">
           Duplicate transaction will be deleted when you save.
         </td>
@@ -1051,7 +1059,7 @@ function EntryRow({
 
   return (
     <>
-    <tr className="bg-gray-50/50 border-t-2 border-gray-200">
+    <tr className="bg-surface-secondary/50 border-t-2 border-border">
       <td className="px-4 py-1.5">
         <input
           ref={dateRef}
@@ -1059,14 +1067,14 @@ function EntryRow({
           value={date}
           onChange={(e) => setDate(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="w-full px-1 py-1 text-sm border border-gray-300 rounded bg-white"
+          className="w-full px-1 py-1 text-sm border border-input-border rounded bg-input"
         />
       </td>
       <td className="px-4 py-1.5">
         <select
           value={type}
           onChange={(e) => setType(e.target.value as TxType)}
-          className="w-full px-1 py-1 text-sm border border-gray-300 rounded bg-white"
+          className="w-full px-1 py-1 text-sm border border-input-border rounded bg-input"
         >
           <option value="debit">Debit</option>
           <option value="credit">Credit</option>
@@ -1081,7 +1089,7 @@ function EntryRow({
               value={transferAccountId ?? ''}
               onChange={(e) => setTransferAccountId(e.target.value ? Number(e.target.value) : null)}
               onKeyDown={handleKeyDown}
-              className="flex-1 px-1 py-1 text-sm border border-gray-300 rounded bg-white"
+              className="flex-1 px-1 py-1 text-sm border border-input-border rounded bg-input"
             >
               <option value="">Select account...</option>
               {otherAccounts.map(a => (
@@ -1105,10 +1113,10 @@ function EntryRow({
                 setTimeout(() => setShowSuggestions(false), 100)
               }}
               placeholder="Payee"
-              className="w-full px-2 py-1 text-sm border border-gray-300 rounded bg-white placeholder-gray-300"
+              className="w-full px-2 py-1 text-sm border border-input-border rounded bg-input placeholder-content-tertiary"
             />
             {showSuggestions && filteredSuggestions.length > 0 && (
-              <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded shadow-sm max-h-48 overflow-auto">
+              <div className="absolute z-10 mt-1 w-full bg-surface border border-border rounded shadow-sm max-h-48 overflow-auto">
                 {filteredSuggestions.map((name, index) => (
                   <button
                     key={name}
@@ -1118,8 +1126,8 @@ function EntryRow({
                       handlePayeeSelect(name)
                     }}
                     className={clsx(
-                      'w-full text-left px-2 py-1 text-sm hover:bg-gray-100',
-                      index === activeIndex && 'bg-gray-100'
+                      'w-full text-left px-2 py-1 text-sm hover:bg-hover',
+                      index === activeIndex && 'bg-surface-tertiary'
                     )}
                   >
                     {name}
@@ -1132,12 +1140,12 @@ function EntryRow({
       </td>
       <td className="px-4 py-1.5">
         {type === 'transfer' ? (
-          <span className="text-sm text-gray-400 px-1">—</span>
+          <span className="text-sm text-content-tertiary px-1">—</span>
         ) : (
           <select
             value={categoryId ?? ''}
             onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : null)}
-            className="w-full px-1 py-1 text-sm border border-gray-300 rounded bg-white"
+            className="w-full px-1 py-1 text-sm border border-input-border rounded bg-input"
           >
             <option value="">—</option>
             {categories.filter((c) => !c.parent_id).map((parent) => (
@@ -1158,7 +1166,7 @@ function EntryRow({
           onChange={(e) => setMemo(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Memo"
-          className="w-full px-2 py-1 text-sm border border-gray-300 rounded bg-white placeholder-gray-300"
+          className="w-full px-2 py-1 text-sm border border-input-border rounded bg-input placeholder-content-tertiary"
         />
       </td>
       <td className="px-4 py-1.5">
@@ -1168,7 +1176,7 @@ function EntryRow({
           onChange={(e) => setAmount(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="0.00"
-          className="w-full px-2 py-1 text-sm text-right font-mono border border-gray-300 rounded bg-white placeholder-gray-300"
+          className="w-full px-2 py-1 text-sm text-right font-mono border border-input-border rounded bg-input placeholder-content-tertiary"
         />
       </td>
       {showBalance && <td className="px-4 py-1.5"></td>}
@@ -1183,7 +1191,7 @@ function EntryRow({
       </td>
     </tr>
     {transferMatch && !deleteMatchId && (
-      <tr className="bg-yellow-50">
+      <tr className="bg-yellow-50 dark:bg-yellow-950">
         <td colSpan={showBalance ? 8 : 7} className="px-4 py-2 text-sm">
           <div className="flex items-center justify-between">
             <span>
@@ -1202,7 +1210,7 @@ function EntryRow({
               </button>
               <button
                 onClick={() => setTransferMatch(null)}
-                className="px-2 py-0.5 text-xs border border-gray-300 rounded hover:bg-gray-100"
+                className="px-2 py-0.5 text-xs border border-border-strong rounded hover:bg-hover"
               >
                 No
               </button>
@@ -1212,7 +1220,7 @@ function EntryRow({
       </tr>
     )}
     {deleteMatchId && (
-      <tr className="bg-green-50">
+      <tr className="bg-green-50 dark:bg-green-950">
         <td colSpan={showBalance ? 8 : 7} className="px-4 py-2 text-sm text-green-700">
           Matching transaction will be replaced when you click Add.
         </td>

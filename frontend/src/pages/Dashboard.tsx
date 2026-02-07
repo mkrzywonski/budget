@@ -75,7 +75,7 @@ export default function Dashboard() {
   }
 
   const handleDelete = (account: Account) => {
-    if (window.confirm(`Delete "${account.name}"? This will also delete all its transactions.`)) {
+    if (window.confirm(`Delete "${account.name}"? This will delete all its transactions and remove linked transfers in other accounts.`)) {
       deleteAccount.mutate(account.id, {
         onSuccess: () => window.location.reload(),
       })
@@ -86,7 +86,7 @@ export default function Dashboard() {
   if (isLoading) {
     return (
       <div className="p-6">
-        <div className="text-gray-500">Loading...</div>
+        <div className="text-content-secondary">Loading...</div>
       </div>
     )
   }
@@ -109,16 +109,16 @@ export default function Dashboard() {
           {accounts.map((account) => (
             <div
               key={account.id}
-              className="relative bg-white rounded-lg shadow hover:shadow-md transition-shadow"
+              className="relative bg-surface rounded-lg shadow hover:shadow-md transition-shadow"
             >
               <Link
                 to={`/accounts/${account.id}`}
                 className="block p-4"
               >
                 <h3 className="font-semibold text-lg pr-8">{account.name}</h3>
-                <p className="text-sm text-gray-500 capitalize">{account.account_type}</p>
+                <p className="text-sm text-content-secondary capitalize">{account.account_type}</p>
                 {account.institution && (
-                  <p className="text-sm text-gray-400">{account.institution}</p>
+                  <p className="text-sm text-content-tertiary">{account.institution}</p>
                 )}
               </Link>
               <div className="absolute top-2 right-2" ref={menuOpenId === account.id ? menuRef : undefined}>
@@ -127,24 +127,24 @@ export default function Dashboard() {
                     e.stopPropagation()
                     setMenuOpenId(menuOpenId === account.id ? null : account.id)
                   }}
-                  className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                  className="p-1 rounded hover:bg-hover text-content-tertiary hover:text-content-secondary"
                 >
                   &#8943;
                 </button>
                 {menuOpenId === account.id && (
-                  <div className="absolute right-0 mt-1 bg-white border border-gray-200 rounded shadow-lg py-1 z-10 min-w-[100px]">
+                  <div className="absolute right-0 mt-1 bg-surface border border-border rounded shadow-lg py-1 z-10 min-w-[100px]">
                     <button
                       onClick={() => {
                         setEditingAccount(account)
                         setMenuOpenId(null)
                       }}
-                      className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                      className="block w-full text-left px-4 py-2 text-sm hover:bg-hover"
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => handleDelete(account)}
-                      className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                      className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-hover"
                     >
                       Delete
                     </button>
@@ -155,8 +155,8 @@ export default function Dashboard() {
           ))}
         </div>
       ) : (
-        <div className="text-center py-12 bg-white rounded-lg">
-          <p className="text-gray-500 mb-4">No accounts yet</p>
+        <div className="text-center py-12 bg-surface rounded-lg">
+          <p className="text-content-secondary mb-4">No accounts yet</p>
           <button
             onClick={() => setShowCreate(true)}
             className="text-blue-600 hover:underline"
@@ -168,12 +168,12 @@ export default function Dashboard() {
 
       {/* Create Account Modal */}
       {showCreate && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+        <div className="fixed inset-0 bg-overlay flex items-center justify-center p-4">
+          <div className="bg-surface rounded-lg p-6 max-w-md w-full">
             <h2 className="text-xl font-bold mb-4">New Account</h2>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-content mb-1">
                   Name
                 </label>
                 <input
@@ -181,18 +181,18 @@ export default function Dashboard() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Checking Account"
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-input-border rounded bg-input focus:ring-2 focus:ring-blue-500"
                   autoFocus
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-content mb-1">
                   Type
                 </label>
                 <select
                   value={accountType}
                   onChange={(e) => setAccountType(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-input-border rounded bg-input focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="checking">Checking</option>
                   <option value="savings">Savings</option>
@@ -202,7 +202,7 @@ export default function Dashboard() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-content mb-1">
                   Institution (optional)
                 </label>
                 <input
@@ -210,7 +210,7 @@ export default function Dashboard() {
                   value={institution}
                   onChange={(e) => setInstitution(e.target.value)}
                   placeholder="Bank of America"
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-input-border rounded bg-input focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div className="flex gap-2 pt-2">
@@ -224,7 +224,7 @@ export default function Dashboard() {
                 <button
                   type="button"
                   onClick={() => setShowCreate(false)}
-                  className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+                  className="px-4 py-2 border border-border-strong rounded hover:bg-hover"
                 >
                   Cancel
                 </button>
@@ -236,30 +236,30 @@ export default function Dashboard() {
 
       {/* Edit Account Modal */}
       {editingAccount && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+        <div className="fixed inset-0 bg-overlay flex items-center justify-center p-4">
+          <div className="bg-surface rounded-lg p-6 max-w-md w-full">
             <h2 className="text-xl font-bold mb-4">Edit Account</h2>
             <form onSubmit={handleEdit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-content mb-1">
                   Name
                 </label>
                 <input
                   type="text"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-input-border rounded bg-input focus:ring-2 focus:ring-blue-500"
                   autoFocus
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-content mb-1">
                   Type
                 </label>
                 <select
                   value={editType}
                   onChange={(e) => setEditType(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-input-border rounded bg-input focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="checking">Checking</option>
                   <option value="savings">Savings</option>
@@ -269,14 +269,14 @@ export default function Dashboard() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-content mb-1">
                   Institution (optional)
                 </label>
                 <input
                   type="text"
                   value={editInstitution}
                   onChange={(e) => setEditInstitution(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-input-border rounded bg-input focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div className="flex gap-2 pt-2">
@@ -290,7 +290,7 @@ export default function Dashboard() {
                 <button
                   type="button"
                   onClick={() => setEditingAccount(null)}
-                  className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+                  className="px-4 py-2 border border-border-strong rounded hover:bg-hover"
                 >
                   Cancel
                 </button>

@@ -50,7 +50,7 @@ export default function Categories() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="bg-white border-b px-6 py-4">
+      <div className="bg-surface border-b px-6 py-4">
         <div className="flex justify-between items-center">
           <h1 className="text-xl font-semibold">Categories</h1>
           <button
@@ -64,7 +64,7 @@ export default function Categories() {
 
       <div className="flex-1 overflow-auto p-6">
         {isLoading ? (
-          <div className="text-gray-500">Loading categories...</div>
+          <div className="text-content-secondary">Loading categories...</div>
         ) : (
           <div className="space-y-3">
             {showAdd && (
@@ -80,7 +80,7 @@ export default function Categories() {
             )}
 
             {(!ordered || ordered.length === 0) && !showAdd && (
-              <div className="text-center py-12 text-gray-500">
+              <div className="text-center py-12 text-content-secondary">
                 No categories defined yet. Add one to get started.
               </div>
             )}
@@ -167,21 +167,21 @@ function CategoryCard({
   onDelete: () => void
 }) {
   return (
-    <div className="bg-white border rounded-lg p-4 group">
+    <div className="bg-surface border rounded-lg p-4 group">
       <div className="flex justify-between items-start">
         <div>
           <h3 className="font-medium text-lg">{category.name}</h3>
-          <div className="mt-1 text-sm text-gray-500">
+          <div className="mt-1 text-sm text-content-secondary">
             Parent: {parentName}
           </div>
-          <div className="mt-1 text-xs text-gray-400">
+          <div className="mt-1 text-xs text-content-tertiary">
             Display order: {category.display_order}
           </div>
         </div>
         <div className="invisible group-hover:visible flex gap-1">
           <button
             onClick={onEdit}
-            className="p-1.5 text-gray-400 hover:text-blue-600 rounded"
+            className="p-1.5 text-content-tertiary hover:text-blue-600 rounded"
             title="Edit"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -190,7 +190,7 @@ function CategoryCard({
           </button>
           <button
             onClick={onDelete}
-            className="p-1.5 text-gray-400 hover:text-red-600 rounded"
+            className="p-1.5 text-content-tertiary hover:text-red-600 rounded"
             title="Delete"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -245,10 +245,10 @@ function CategoryForm({
   }
 
   return (
-    <div className="bg-white border-2 border-blue-200 rounded-lg p-4">
+    <div className="bg-surface border-2 border-blue-200 rounded-lg p-4">
       <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-content mb-1">
             Name
           </label>
           <input
@@ -257,13 +257,13 @@ function CategoryForm({
             onChange={(e) => setName(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="e.g., Groceries"
-            className="w-full px-3 py-2 border border-gray-300 rounded"
+            className="w-full px-3 py-2 border border-input-border rounded bg-input"
             autoFocus
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-content mb-1">
             Parent Category
           </label>
           <select
@@ -272,19 +272,22 @@ function CategoryForm({
               const value = e.target.value
               setParentId(value ? Number(value) : null)
             }}
-            className="w-full px-3 py-2 border border-gray-300 rounded"
+            className="w-full px-3 py-2 border border-input-border rounded bg-input"
           >
             <option value="">None</option>
-            {availableParents.map((parent) => (
-              <option key={parent.id} value={parent.id}>
-                {parent.name}
-              </option>
+            {availableParents.filter((c) => !c.parent_id).map((parent) => (
+              <optgroup key={parent.id} label={parent.name}>
+                <option value={parent.id}>{parent.name}</option>
+                {availableParents.filter((c) => c.parent_id === parent.id).map((child) => (
+                  <option key={child.id} value={child.id}>{child.name}</option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-content mb-1">
             Display Order
           </label>
           <input
@@ -292,14 +295,14 @@ function CategoryForm({
             value={displayOrder}
             onChange={(e) => setDisplayOrder(Number(e.target.value))}
             onKeyDown={handleKeyDown}
-            className="w-full px-3 py-2 border border-gray-300 rounded"
+            className="w-full px-3 py-2 border border-input-border rounded bg-input"
           />
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
           <button
             onClick={onCancel}
-            className="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50"
+            className="px-3 py-1.5 text-sm border border-border-strong rounded hover:bg-hover"
           >
             Cancel
           </button>

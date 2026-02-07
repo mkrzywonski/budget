@@ -54,7 +54,7 @@ export default function Payees() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="bg-white border-b px-6 py-4">
+      <div className="bg-surface border-b px-6 py-4">
         <div className="flex justify-between items-center">
           <h1 className="text-xl font-semibold">Payees</h1>
           <div className="flex items-center gap-3">
@@ -66,7 +66,7 @@ export default function Payees() {
             <button
               onClick={handleRematch}
               disabled={rematchMutation.isPending}
-              className="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+              className="px-3 py-1.5 text-sm border border-border-strong rounded hover:bg-hover disabled:opacity-50"
             >
               {rematchMutation.isPending ? 'Matching...' : 'Re-match All Transactions'}
             </button>
@@ -83,7 +83,7 @@ export default function Payees() {
       {/* Content */}
       <div className="flex-1 overflow-auto p-6">
         {isLoading ? (
-          <div className="text-gray-500">Loading payees...</div>
+          <div className="text-content-secondary">Loading payees...</div>
         ) : (
           <div className="space-y-3">
             {showAdd && (
@@ -103,7 +103,7 @@ export default function Payees() {
             )}
 
             {(!payees || payees.length === 0) && !showAdd && (
-              <div className="text-center py-12 text-gray-500">
+              <div className="text-center py-12 text-content-secondary">
                 No payees defined yet. Add one to start matching transaction names.
               </div>
             )}
@@ -153,7 +153,7 @@ function PayeeCard({
   onDelete
 }: {
   payee: Payee
-  categories: { id: number; name: string }[]
+  categories: { id: number; name: string; parent_id: number | null }[]
   onEdit: () => void
   onDelete: () => void
 }) {
@@ -162,23 +162,23 @@ function PayeeCard({
     '—'
 
   return (
-    <div className="bg-white border rounded-lg p-4 group">
+    <div className="bg-surface border rounded-lg p-4 group">
       <div className="flex justify-between items-start">
         <div>
           <h3 className="font-medium text-lg">{payee.name}</h3>
-          <div className="mt-1 text-sm text-gray-500">
+          <div className="mt-1 text-sm text-content-secondary">
             Default category: {categoryName}
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
             {payee.match_patterns.map((p, i) => (
               <span
                 key={i}
-                className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-sm rounded"
+                className="inline-flex items-center gap-1 px-2 py-1 bg-surface-tertiary text-sm rounded"
               >
-                <span className="text-gray-500 text-xs font-medium uppercase">
+                <span className="text-content-secondary text-xs font-medium uppercase">
                   {p.type.replace('_', ' ')}
                 </span>
-                <span className="font-mono text-gray-700">{p.pattern}</span>
+                <span className="font-mono text-content">{p.pattern}</span>
               </span>
             ))}
           </div>
@@ -186,7 +186,7 @@ function PayeeCard({
         <div className="invisible group-hover:visible flex gap-1">
           <button
             onClick={onEdit}
-            className="p-1.5 text-gray-400 hover:text-blue-600 rounded"
+            className="p-1.5 text-content-tertiary hover:text-blue-600 rounded"
             title="Edit"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -195,7 +195,7 @@ function PayeeCard({
           </button>
           <button
             onClick={onDelete}
-            className="p-1.5 text-gray-400 hover:text-red-600 rounded"
+            className="p-1.5 text-content-tertiary hover:text-red-600 rounded"
             title="Delete"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -219,7 +219,7 @@ function PayeeForm({
   isSaving
 }: {
   payee?: Payee
-  categories: { id: number; name: string }[]
+  categories: { id: number; name: string; parent_id: number | null }[]
   onSave: (name: string, patterns: MatchPattern[], defaultCategoryId: number | null) => Promise<void>
   onCancel: () => void
   isSaving: boolean
@@ -296,11 +296,11 @@ function PayeeForm({
   }
 
   return (
-    <div className="bg-white border-2 border-blue-200 rounded-lg p-4">
+    <div className="bg-surface border-2 border-blue-200 rounded-lg p-4">
       <div className="space-y-4">
         {/* Name */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-content mb-1">
             Display Name
           </label>
           <input
@@ -309,14 +309,14 @@ function PayeeForm({
             onChange={(e) => setName(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="e.g., Institute for Justice"
-            className="w-full px-3 py-2 border border-gray-300 rounded"
+            className="w-full px-3 py-2 border border-input-border rounded bg-input"
             autoFocus
           />
         </div>
 
         {/* Default Category */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-content mb-1">
             Default Category
           </label>
           <select
@@ -325,20 +325,23 @@ function PayeeForm({
               const value = e.target.value
               setDefaultCategoryId(value ? Number(value) : null)
             }}
-            className="w-full px-3 py-2 border border-gray-300 rounded"
+            className="w-full px-3 py-2 border border-input-border rounded bg-input"
           >
             <option value="">None</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
+            {categories.filter((c) => !c.parent_id).map((parent) => (
+              <optgroup key={parent.id} label={parent.name}>
+                <option value={parent.id}>{parent.name}</option>
+                {categories.filter((c) => c.parent_id === parent.id).map((child) => (
+                  <option key={child.id} value={child.id}>{child.name}</option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </div>
 
         {/* Match patterns */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-content mb-1">
             Match Patterns
           </label>
           <div className="space-y-2">
@@ -347,7 +350,7 @@ function PayeeForm({
                 <select
                   value={p.type}
                   onChange={(e) => updatePattern(i, 'type', e.target.value)}
-                  className="px-2 py-2 border border-gray-300 rounded text-sm w-36"
+                  className="px-2 py-2 border border-input-border rounded text-sm w-36 bg-input"
                 >
                   {MATCH_TYPES.map((t) => (
                     <option key={t.value} value={t.value}>
@@ -361,12 +364,12 @@ function PayeeForm({
                   onChange={(e) => updatePattern(i, 'pattern', e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="Pattern to match..."
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded font-mono text-sm"
+                  className="flex-1 px-3 py-2 border border-input-border rounded font-mono text-sm bg-input"
                 />
                 {patterns.length > 1 && (
                   <button
                     onClick={() => removePattern(i)}
-                    className="p-1.5 text-gray-400 hover:text-red-600 rounded"
+                    className="p-1.5 text-content-tertiary hover:text-red-600 rounded"
                     title="Remove pattern"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -386,19 +389,19 @@ function PayeeForm({
         </div>
 
         <div className="border-t pt-3">
-          <div className="text-xs text-gray-500 mb-2">Preview matching payees</div>
+          <div className="text-xs text-content-secondary mb-2">Preview matching payees</div>
           {!hasAnyPattern ? (
-            <div className="text-xs text-gray-400">Enter a pattern to see matches</div>
+            <div className="text-xs text-content-tertiary">Enter a pattern to see matches</div>
           ) : isPreviewing ? (
-            <div className="text-xs text-gray-400">Matching...</div>
+            <div className="text-xs text-content-tertiary">Matching...</div>
           ) : !previewMatches || previewMatches.length === 0 ? (
-            <div className="text-xs text-gray-400">No matches</div>
+            <div className="text-xs text-content-tertiary">No matches</div>
           ) : (
             <div className="flex flex-wrap gap-2">
               {previewMatches.map((value) => (
                 <span
                   key={value}
-                  className="inline-flex items-center px-2 py-1 bg-gray-100 text-xs rounded font-mono text-gray-700"
+                  className="inline-flex items-center px-2 py-1 bg-surface-tertiary text-xs rounded font-mono text-content"
                 >
                   {value}
                 </span>
@@ -411,7 +414,7 @@ function PayeeForm({
         <div className="flex justify-end gap-2 pt-2">
           <button
             onClick={onCancel}
-            className="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50"
+            className="px-3 py-1.5 text-sm border border-border-strong rounded hover:bg-hover"
           >
             Cancel
           </button>
