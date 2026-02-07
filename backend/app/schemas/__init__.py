@@ -16,6 +16,7 @@ from .import_schemas import (
     ImportProfileResponse,
 )
 from .payee import PayeeCreate, PayeeUpdate, PayeeResponse, RematchResponse
+from .report import CategorySpendItem, PayeeSpendItem, MonthlySpendItem
 
 __all__ = [
     "AccountCreate",
@@ -39,4 +40,7 @@ __all__ = [
     "PayeeUpdate",
     "PayeeResponse",
     "RematchResponse",
+    "CategorySpendItem",
+    "PayeeSpendItem",
+    "MonthlySpendItem",
 ]

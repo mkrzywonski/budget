@@ -111,6 +111,25 @@ export interface Payee {
   updated_at: string
 }
 
+export interface CategorySpendItem {
+  category_id: number | null
+  category_name: string
+  total_cents: number
+  transaction_count: number
+}
+
+export interface PayeeSpendItem {
+  payee_name: string
+  total_cents: number
+  transaction_count: number
+}
+
+export interface MonthlySpendItem {
+  year: number
+  month: number
+  total_cents: number
+}
+
 export interface BookStatus {
   is_open: boolean
   path: string | null

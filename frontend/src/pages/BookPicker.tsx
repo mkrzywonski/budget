@@ -6,12 +6,18 @@ export default function BookPicker() {
   const openBook = useOpenBook()
   const createBook = useCreateBook()
 
-  const [showCreate, setShowCreate] = useState(false)
+  const [showForm, setShowForm] = useState<'open' | 'create' | null>(null)
   const [newPath, setNewPath] = useState('')
   const [newName, setNewName] = useState('')
 
   const handleOpen = (path: string, name: string) => {
     openBook.mutate({ path, name })
+  }
+
+  const handleOpenExisting = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newPath) return
+    openBook.mutate({ path: newPath })
   }
 
   const handleCreate = (e: React.FormEvent) => {
@@ -20,6 +26,12 @@ export default function BookPicker() {
 
     const path = newPath.endsWith('.db') ? newPath : `${newPath}.db`
     createBook.mutate({ path, name: newName || undefined })
+  }
+
+  const closeForm = () => {
+    setShowForm(null)
+    setNewPath('')
+    setNewName('')
   }
 
   return (
@@ -51,8 +63,40 @@ export default function BookPicker() {
           </div>
         )}
 
-        {/* Create New */}
-        {showCreate ? (
+        {/* Open / Create Forms */}
+        {showForm === 'open' ? (
+          <form onSubmit={handleOpenExisting} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-content mb-1">
+                File Path
+              </label>
+              <input
+                type="text"
+                value={newPath}
+                onChange={(e) => setNewPath(e.target.value)}
+                placeholder="/home/user/budget.db"
+                className="w-full px-3 py-2 border border-input-border rounded bg-input focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                autoFocus
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                disabled={openBook.isPending || !newPath}
+                className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+              >
+                {openBook.isPending ? 'Opening...' : 'Open'}
+              </button>
+              <button
+                type="button"
+                onClick={closeForm}
+                className="px-4 py-2 border border-border-strong rounded hover:bg-hover"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : showForm === 'create' ? (
           <form onSubmit={handleCreate} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-content mb-1">
@@ -64,6 +108,7 @@ export default function BookPicker() {
                 onChange={(e) => setNewPath(e.target.value)}
                 placeholder="/home/user/budget.db"
                 className="w-full px-3 py-2 border border-input-border rounded bg-input focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                autoFocus
               />
             </div>
             <div>
@@ -88,7 +133,7 @@ export default function BookPicker() {
               </button>
               <button
                 type="button"
-                onClick={() => setShowCreate(false)}
+                onClick={closeForm}
                 className="px-4 py-2 border border-border-strong rounded hover:bg-hover"
               >
                 Cancel
@@ -101,12 +146,20 @@ export default function BookPicker() {
             )}
           </form>
         ) : (
-          <button
-            onClick={() => setShowCreate(true)}
-            className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
-          >
-            Create New Book
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowForm('open')}
+              className="flex-1 py-2 rounded border border-border-strong hover:bg-hover font-medium"
+            >
+              Open Existing
+            </button>
+            <button
+              onClick={() => setShowForm('create')}
+              className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+            >
+              Create New
+            </button>
+          </div>
         )}
 
         {openBook.isError && (

@@ -40,6 +40,16 @@ export default function Layout({ bookName, children }: LayoutProps) {
           >
             Dashboard
           </Link>
+          <Link
+            to="/reports"
+            className={`block px-3 py-2 rounded mb-2 ${
+              location.pathname === '/reports'
+                ? 'bg-gray-700 dark:bg-gray-900 text-white'
+                : 'text-gray-300 hover:bg-gray-700 dark:hover:bg-gray-900'
+            }`}
+          >
+            Reports
+          </Link>
 
           <div className="mt-4">
             <h2 className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
