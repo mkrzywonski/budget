@@ -125,8 +125,8 @@ export function useConvertToTransfer() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ id, target_account_id }: { id: number; target_account_id: number }) =>
-      api.post<Transaction>(`/transactions/${id}/convert-to-transfer`, { target_account_id }),
+    mutationFn: ({ id, target_account_id, delete_match_id }: { id: number; target_account_id: number; delete_match_id?: number }) =>
+      api.post<Transaction>(`/transactions/${id}/convert-to-transfer`, { target_account_id, delete_match_id }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
     }

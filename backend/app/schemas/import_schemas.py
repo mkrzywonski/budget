@@ -41,6 +41,7 @@ class ParsedTransactionResponse(BaseModel):
     payee_raw: str | None
     memo: str | None
     fingerprint: str
+    external_id: str | None = None
     raw_data: dict
     warnings: list[str]
 
@@ -54,6 +55,7 @@ class ParsedTransactionResponse(BaseModel):
             payee_raw=tx.payee_raw,
             memo=tx.memo,
             fingerprint=tx.fingerprint,
+            external_id=tx.external_id,
             raw_data=tx.raw_data,
             warnings=tx.warnings
         )

@@ -198,8 +198,6 @@ export default function Dashboard() {
                   <option value="savings">Savings</option>
                   <option value="credit_card">Credit Card</option>
                   <option value="cash">Cash</option>
-                  <option value="investment">Investment</option>
-                  <option value="loan">Loan</option>
                   <option value="other">Other</option>
                 </select>
               </div>
@@ -267,8 +265,6 @@ export default function Dashboard() {
                   <option value="savings">Savings</option>
                   <option value="credit_card">Credit Card</option>
                   <option value="cash">Cash</option>
-                  <option value="investment">Investment</option>
-                  <option value="loan">Loan</option>
                   <option value="other">Other</option>
                 </select>
               </div>

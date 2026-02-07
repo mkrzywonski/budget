@@ -73,9 +73,20 @@ class ImportService:
         # Get fingerprints of existing transactions in this account
         existing_fingerprints = self._get_existing_fingerprints(account_id)
 
+        # Also build a map of external_ids for FITID-based dedup (QFX imports)
+        existing_external_ids = self._get_existing_external_ids(account_id)
+
         for tx in parse_result.transactions:
-            if tx.fingerprint in existing_fingerprints:
-                # Find the existing transaction for display
+            # Check external_id first (more reliable for QFX re-imports)
+            if tx.external_id and tx.external_id in existing_external_ids:
+                existing = existing_external_ids[tx.external_id]
+                duplicates.append(DuplicateInfo(
+                    parsed_tx=tx,
+                    existing_tx=existing,
+                    fingerprint=tx.fingerprint
+                ))
+            elif tx.fingerprint in existing_fingerprints:
+                # Fall back to fingerprint-based dedup (CSV imports)
                 existing = existing_fingerprints[tx.fingerprint]
                 duplicates.append(DuplicateInfo(
                     parsed_tx=tx,
@@ -109,6 +120,15 @@ class ImportService:
             fingerprints[fp] = tx
 
         return fingerprints
+
+    def _get_existing_external_ids(self, account_id: int) -> dict[str, Transaction]:
+        """Get external_ids (e.g. FITIDs) of all transactions in the account."""
+        transactions = self.db.query(Transaction).filter(
+            Transaction.account_id == account_id,
+            Transaction.external_id.isnot(None)
+        ).all()
+
+        return {tx.external_id: tx for tx in transactions}
 
     def _compute_fingerprint(self, tx: Transaction) -> str:
         """Compute fingerprint for an existing transaction."""
@@ -146,8 +166,9 @@ class ImportService:
         for tx in transactions:
             # Check if this was a duplicate that wasn't accepted
             if tx.fingerprint and tx.row_index not in accepted_dupes:
-                # Check if it's actually a duplicate
-                existing = self._find_duplicate(account_id, tx)
+                # Check if it's actually a duplicate (exclude current batch to avoid
+                # false positives from same-batch transactions with same date+amount)
+                existing = self._find_duplicate(account_id, tx, exclude_batch_id=batch_id)
                 if existing and tx.row_index not in accepted_dupes:
                     skipped += 1
                     continue
@@ -161,7 +182,8 @@ class ImportService:
                 memo=tx.memo,
                 transaction_type=TransactionType.ACTUAL,
                 source=source,
-                import_batch_id=batch_id
+                import_batch_id=batch_id,
+                external_id=tx.external_id
             )
             self.db.add(db_tx)
             self.db.flush()
@@ -176,15 +198,28 @@ class ImportService:
             transaction_ids=imported_ids
         )
 
-    def _find_duplicate(self, account_id: int, tx: ParsedTransaction) -> Transaction | None:
+    def _find_duplicate(self, account_id: int, tx: ParsedTransaction, exclude_batch_id: str | None = None) -> Transaction | None:
         """Find an existing transaction matching this parsed transaction."""
-        return self.db.query(Transaction).filter(
+        # Prefer external_id match (FITID) — more reliable than date+amount
+        if tx.external_id:
+            match = self.db.query(Transaction).filter(
+                Transaction.account_id == account_id,
+                Transaction.external_id == tx.external_id
+            ).first()
+            if match:
+                return match
+
+        # Fall back to date+amount match
+        query = self.db.query(Transaction).filter(
             and_(
                 Transaction.account_id == account_id,
                 Transaction.posted_date == tx.posted_date,
                 Transaction.amount_cents == tx.amount_cents
             )
-        ).first()
+        )
+        if exclude_batch_id:
+            query = query.filter(Transaction.import_batch_id != exclude_batch_id)
+        return query.first()
 
     def find_matching_profile(
         self,

@@ -42,6 +42,7 @@ class ParsedTransaction:
 
     # For duplicate detection
     fingerprint: str = ""
+    external_id: str | None = None  # e.g., FITID from QFX
 
     # Original row data for reference
     raw_data: dict = field(default_factory=dict)

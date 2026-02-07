@@ -48,6 +48,7 @@ def _migrate_schema(engine: Engine) -> None:
     # Format: (table_name, column_name, column_type_sql)
     migrations = [
         ("transactions", "display_name", "VARCHAR(255)"),
+        ("transactions", "external_id", "VARCHAR(255)"),
     ]
 
     with engine.connect() as conn:

@@ -210,8 +210,8 @@ export default function Ledger() {
     })
   }
 
-  const handleConvertToTransfer = async (txId: number, targetAccountId: number) => {
-    await convertToTransferMutation.mutateAsync({ id: txId, target_account_id: targetAccountId })
+  const handleConvertToTransfer = async (txId: number, targetAccountId: number, deleteMatchId?: number) => {
+    await convertToTransferMutation.mutateAsync({ id: txId, target_account_id: targetAccountId, delete_match_id: deleteMatchId })
     setEditingId(null)
   }
 
@@ -371,7 +371,7 @@ export default function Ledger() {
                     currentAccountId={id}
                     showBalance={showBalance}
                     onSave={(data) => handleUpdate(tx.id, data)}
-                    onConvertToTransfer={(targetAccountId) => handleConvertToTransfer(tx.id, targetAccountId)}
+                    onConvertToTransfer={(targetAccountId, deleteMatchId) => handleConvertToTransfer(tx.id, targetAccountId, deleteMatchId)}
                     onCancel={() => setEditingId(null)}
                   />
                 ) : (
@@ -452,6 +452,20 @@ function TransactionRow({
   onCategorize
 }: TransactionRowProps) {
   const isForecast = tx.transaction_type === 'forecast'
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
+
+  const handlePayeeContext = (e: React.MouseEvent) => {
+    if (!tx.payee_raw && !tx.display_name) return
+    e.preventDefault()
+    setContextMenu({ x: e.clientX, y: e.clientY })
+  }
+
+  useEffect(() => {
+    if (!contextMenu) return
+    const close = () => setContextMenu(null)
+    window.addEventListener('click', close)
+    return () => window.removeEventListener('click', close)
+  }, [contextMenu])
 
   return (
     <tr
@@ -466,11 +480,33 @@ function TransactionRow({
       <td className={clsx('px-4 py-2 text-sm', TYPE_COLORS[deriveTxType(tx)])}>
         {TYPE_LABELS[deriveTxType(tx)]}
       </td>
-      <td className="px-4 py-2">
+      <td
+        className="px-4 py-2 cursor-default"
+        onContextMenu={handlePayeeContext}
+      >
         {tx.display_name || tx.payee_raw || '—'}
+        {contextMenu && (
+          <div
+            className="fixed z-50 bg-white border border-gray-200 rounded shadow-lg py-1 min-w-[160px]"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+          >
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setContextMenu(null)
+                onAddPayee()
+              }}
+              className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100"
+            >
+              Create payee rule
+            </button>
+          </div>
+        )}
       </td>
       <td className="px-4 py-2 text-sm text-gray-500">
-        {tx.category_id ? (
+        {tx.transaction_type === 'transfer' ? (
+          '—'
+        ) : tx.category_id ? (
           categoryMap.get(tx.category_id) || '—'
         ) : (
           <select
@@ -510,21 +546,6 @@ function TransactionRow({
       )}
       <td className="px-4 py-1 text-right">
         <div className="invisible group-hover:visible flex justify-end gap-1">
-          <button
-            onClick={onAddPayee}
-            disabled={!tx.payee_raw && !tx.display_name}
-            className="p-1 text-gray-400 hover:text-emerald-600 rounded disabled:opacity-40"
-            title="Add payee rule"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-          </button>
           <button
             onClick={onEdit}
             className="p-1 text-gray-400 hover:text-blue-600 rounded"
@@ -603,7 +624,7 @@ interface EditRowProps {
     memo: string
     category_id: number | null
   }) => void
-  onConvertToTransfer: (targetAccountId: number) => void
+  onConvertToTransfer: (targetAccountId: number, deleteMatchId?: number) => void
   onCancel: () => void
 }
 
@@ -618,14 +639,44 @@ function EditRow({ transaction: tx, categories, accounts, currentAccountId, show
   )
   const [categoryId, setCategoryId] = useState<number | null>(tx.category_id)
   const [transferAccountId, setTransferAccountId] = useState<number | null>(null)
+  const [transferMatch, setTransferMatch] = useState<TransferMatch | null>(null)
+  const [deleteMatchId, setDeleteMatchId] = useState<number | null>(null)
+  const findMatch = useFindTransferMatch()
 
   const otherAccounts = accounts.filter(a => a.id !== currentAccountId)
+
+  // The original tx sign tells us direction: negative = outflow (transfer TO), positive = inflow (transfer FROM)
+  const isOutflow = tx.amount_cents < 0
+  const directionLabel = isOutflow ? 'Transfer to' : 'Transfer from'
+
+  // Search for matching transactions in target account when converting to transfer
+  useEffect(() => {
+    if (type !== 'transfer' || isExistingTransfer || !transferAccountId) {
+      setTransferMatch(null)
+      setDeleteMatchId(null)
+      return
+    }
+    const cents = Math.abs(tx.amount_cents)
+    if (cents <= 0) return
+
+    findMatch.mutateAsync({
+      source_account_id: currentAccountId,
+      target_account_id: transferAccountId,
+      amount_cents: cents,
+      posted_date: date
+    }).then(matches => {
+      setTransferMatch(matches.length > 0 ? matches[0] : null)
+      setDeleteMatchId(null)
+    }).catch(() => {
+      setTransferMatch(null)
+    })
+  }, [type, transferAccountId])
 
   const doSave = () => {
     // Converting a non-transfer to transfer
     if (type === 'transfer' && !isExistingTransfer) {
       if (!transferAccountId) return
-      onConvertToTransfer(transferAccountId)
+      onConvertToTransfer(transferAccountId, deleteMatchId ?? undefined)
       return
     }
     const cents = parseCurrency(amount)
@@ -644,6 +695,7 @@ function EditRow({ transaction: tx, categories, accounts, currentAccountId, show
   }
 
   return (
+    <>
     <tr className="bg-blue-50">
       <td className="px-4 py-1">
         <input
@@ -675,16 +727,19 @@ function EditRow({ transaction: tx, categories, accounts, currentAccountId, show
             {tx.display_name || tx.payee_normalized || 'Transfer'}
           </span>
         ) : type === 'transfer' ? (
-          <select
-            value={transferAccountId ?? ''}
-            onChange={(e) => setTransferAccountId(e.target.value ? Number(e.target.value) : null)}
-            className="w-full px-1 py-1 text-sm border border-gray-300 rounded"
-          >
-            <option value="">Select account...</option>
-            {otherAccounts.map(a => (
-              <option key={a.id} value={a.id}>{a.name}</option>
-            ))}
-          </select>
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-purple-600 font-medium whitespace-nowrap">{directionLabel}</span>
+            <select
+              value={transferAccountId ?? ''}
+              onChange={(e) => setTransferAccountId(e.target.value ? Number(e.target.value) : null)}
+              className="flex-1 px-1 py-1 text-sm border border-gray-300 rounded"
+            >
+              <option value="">Select account...</option>
+              {otherAccounts.map(a => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+          </div>
         ) : (
           <input
             type="text"
@@ -778,6 +833,43 @@ function EditRow({ transaction: tx, categories, accounts, currentAccountId, show
         </div>
       </td>
     </tr>
+    {transferMatch && !deleteMatchId && (
+      <tr className="bg-yellow-50">
+        <td colSpan={showBalance ? 8 : 7} className="px-4 py-2 text-sm">
+          <div className="flex items-center justify-between">
+            <span>
+              Found matching {formatCurrency(transferMatch.amount_cents)} transaction
+              in <strong>{transferMatch.account_name}</strong> on{' '}
+              {format(parseISO(transferMatch.posted_date), 'MM/dd/yyyy')}
+              {transferMatch.payee_raw && <> ({transferMatch.payee_raw})</>}
+              {' '}&mdash; delete duplicate?
+            </span>
+            <div className="flex gap-2 ml-4">
+              <button
+                onClick={() => setDeleteMatchId(transferMatch.transaction_id)}
+                className="px-2 py-0.5 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+              >
+                Yes
+              </button>
+              <button
+                onClick={() => setTransferMatch(null)}
+                className="px-2 py-0.5 text-xs border border-gray-300 rounded hover:bg-gray-100"
+              >
+                No
+              </button>
+            </div>
+          </div>
+        </td>
+      </tr>
+    )}
+    {deleteMatchId && (
+      <tr className="bg-green-50">
+        <td colSpan={showBalance ? 8 : 7} className="px-4 py-2 text-sm text-green-700">
+          Duplicate transaction will be deleted when you save.
+        </td>
+      </tr>
+    )}
+    </>
   )
 }
 
@@ -983,17 +1075,20 @@ function EntryRow({
       </td>
       <td className="px-4 py-1.5">
         {type === 'transfer' ? (
-          <select
-            value={transferAccountId ?? ''}
-            onChange={(e) => setTransferAccountId(e.target.value ? Number(e.target.value) : null)}
-            onKeyDown={handleKeyDown}
-            className="w-full px-1 py-1 text-sm border border-gray-300 rounded bg-white"
-          >
-            <option value="">Select account...</option>
-            {otherAccounts.map(a => (
-              <option key={a.id} value={a.id}>{a.name}</option>
-            ))}
-          </select>
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-purple-600 font-medium whitespace-nowrap">Transfer to</span>
+            <select
+              value={transferAccountId ?? ''}
+              onChange={(e) => setTransferAccountId(e.target.value ? Number(e.target.value) : null)}
+              onKeyDown={handleKeyDown}
+              className="flex-1 px-1 py-1 text-sm border border-gray-300 rounded bg-white"
+            >
+              <option value="">Select account...</option>
+              {otherAccounts.map(a => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+          </div>
         ) : (
           <div className="relative">
             <input

@@ -80,9 +80,10 @@ def find_transfer_match(
     window_start = posted_date - timedelta(days=3)
     window_end = posted_date + timedelta(days=3)
 
+    from sqlalchemy import func
     matches = db.query(Transaction).filter(
         Transaction.account_id == target_account_id,
-        Transaction.amount_cents == abs(amount_cents),
+        func.abs(Transaction.amount_cents) == abs(amount_cents),
         Transaction.posted_date >= window_start,
         Transaction.posted_date <= window_end,
         Transaction.transaction_type != TransactionType.TRANSFER,
@@ -211,22 +212,39 @@ def convert_to_transfer(
 
     source_account = db.query(Account).filter(Account.id == tx.account_id).first()
 
-    # Convert the original transaction to outflow
+    # Delete matched transaction if specified (duplicate in target account)
+    if request.delete_match_id:
+        match_tx = db.query(Transaction).filter(Transaction.id == request.delete_match_id).first()
+        if match_tx:
+            db.delete(match_tx)
+            db.flush()
+
+    # Determine direction from the original amount sign
+    # Negative = outflow (money left this account → "Transfer to")
+    # Positive = inflow (money came into this account → "Transfer from")
+    is_outflow = tx.amount_cents < 0
+
     tx.transaction_type = TransactionType.TRANSFER
-    tx.amount_cents = -abs(tx.amount_cents)
-    tx.payee_normalized = f"Transfer to {target_account.name}"
-    tx.display_name = f"Transfer to {target_account.name}"
     tx.payee_raw = None
     tx.category_id = None
+
+    if is_outflow:
+        tx.amount_cents = -abs(tx.amount_cents)
+        tx.payee_normalized = f"Transfer to {target_account.name}"
+        tx.display_name = f"Transfer to {target_account.name}"
+    else:
+        tx.amount_cents = abs(tx.amount_cents)
+        tx.payee_normalized = f"Transfer from {target_account.name}"
+        tx.display_name = f"Transfer from {target_account.name}"
     db.flush()
 
-    # Create the linked counterpart (inflow)
+    # Create the linked counterpart (opposite sign)
     linked = Transaction(
         account_id=request.target_account_id,
         posted_date=tx.posted_date,
-        amount_cents=abs(tx.amount_cents),
-        payee_normalized=f"Transfer from {source_account.name}",
-        display_name=f"Transfer from {source_account.name}",
+        amount_cents=-tx.amount_cents,
+        payee_normalized=f"Transfer {'from' if is_outflow else 'to'} {source_account.name}",
+        display_name=f"Transfer {'from' if is_outflow else 'to'} {source_account.name}",
         memo=tx.memo,
         transaction_type=TransactionType.TRANSFER,
         source=tx.source,
@@ -323,6 +341,10 @@ def delete_transaction(transaction_id: int, db: Session = Depends(get_db)):
             Transaction.id == db_transaction.transfer_link_id
         ).first()
         if linked:
+            # Break circular reference before deleting
+            linked.transfer_link_id = None
+            db_transaction.transfer_link_id = None
+            db.flush()
             db.delete(linked)
 
     db.delete(db_transaction)

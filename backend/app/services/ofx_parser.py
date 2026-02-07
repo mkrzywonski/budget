@@ -75,6 +75,7 @@ def parse_ofx_file(content: str) -> CSVParseResult:
                 payee_raw=payee_raw,
                 memo=memo_str,
                 fingerprint=fingerprint,
+                external_id=fitid or None,
                 raw_data=raw_data,
             ))
         except Exception as e:

@@ -41,6 +41,7 @@ class TransactionUpdate(BaseModel):
 class ConvertToTransferRequest(BaseModel):
     """Request to convert a regular transaction into a transfer."""
     target_account_id: int
+    delete_match_id: int | None = None
 
 
 class TransferMatchResponse(BaseModel):

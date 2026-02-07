@@ -255,6 +255,7 @@ def commit_import(
             payee_raw=tx.payee_raw,
             memo=tx.memo,
             fingerprint=tx.fingerprint,
+            external_id=tx.external_id,
             raw_data=tx.raw_data,
             warnings=tx.warnings
         ))
