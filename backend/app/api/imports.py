@@ -4,9 +4,11 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Account, TransactionSource
 from ..services.csv_parser import CSVParser, detect_columns, ParsedTransaction
+from ..services.ofx_parser import parse_ofx_file
 from ..services.import_service import ImportService
 from ..schemas.import_schemas import (
     CSVUploadRequest,
+    OFXUploadRequest,
     CSVPreviewResponse,
     ParsedTransactionResponse,
     DuplicateResponse,
@@ -175,6 +177,60 @@ def preview_csv_import(
     )
 
 
+@router.post("/ofx/preview", response_model=CSVPreviewResponse)
+def preview_ofx_import(
+    request: OFXUploadRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Parse an OFX/QFX file and preview the import.
+
+    OFX has a fixed structure, so no column mapping step is needed.
+    """
+    account = db.query(Account).filter(Account.id == request.account_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    parse_result = parse_ofx_file(request.content)
+
+    if parse_result.errors and not parse_result.transactions:
+        raise HTTPException(status_code=400, detail=parse_result.errors[0])
+
+    import_service = ImportService(db)
+    preview = import_service.preview_import(request.account_id, parse_result)
+
+    new_txs = [ParsedTransactionResponse.from_parsed(tx) for tx in preview.new_transactions]
+
+    duplicates = []
+    for dup in preview.duplicates:
+        duplicates.append(DuplicateResponse(
+            parsed=ParsedTransactionResponse.from_parsed(dup.parsed_tx),
+            existing=ExistingTransactionInfo(
+                id=dup.existing_tx.id,
+                posted_date=dup.existing_tx.posted_date,
+                amount_cents=dup.existing_tx.amount_cents,
+                payee_raw=dup.existing_tx.payee_raw,
+                memo=dup.existing_tx.memo
+            ),
+            fingerprint=dup.fingerprint
+        ))
+
+    return CSVPreviewResponse(
+        headers=parse_result.headers,
+        header_signature=parse_result.header_signature,
+        detected_date_format=None,
+        detected_mappings=None,
+        batch_id=preview.batch_id,
+        new_transactions=new_txs,
+        duplicates=duplicates,
+        total_count=preview.total_count,
+        new_count=preview.new_count,
+        duplicate_count=preview.duplicate_count,
+        error_count=preview.error_count,
+        errors=preview.errors,
+    )
+
+
 @router.post("/commit", response_model=ImportCommitResponse)
 def commit_import(
     request: ImportCommitRequest,
@@ -203,12 +259,18 @@ def commit_import(
             warnings=tx.warnings
         ))
 
+    source_map = {
+        "import_csv": TransactionSource.IMPORT_CSV,
+        "import_qfx": TransactionSource.IMPORT_QFX,
+    }
+    source = source_map.get(request.source, TransactionSource.IMPORT_CSV)
+
     result = import_service.commit_import(
         account_id=request.account_id,
         batch_id=request.batch_id,
         transactions=transactions,
         accepted_duplicate_indices=request.accepted_duplicate_indices,
-        source=TransactionSource.IMPORT_CSV
+        source=source
     )
 
     return ImportCommitResponse(

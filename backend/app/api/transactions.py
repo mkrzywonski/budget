@@ -1,11 +1,17 @@
-from datetime import date
+from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, extract
 
 from ..database import get_db
 from ..models import Transaction, Account, TransactionType
-from ..schemas import TransactionCreate, TransactionUpdate, TransactionResponse
+from ..schemas import (
+    TransactionCreate,
+    TransactionUpdate,
+    TransactionResponse,
+    ConvertToTransferRequest,
+    TransferMatchResponse,
+)
 from ..services.payee_matcher import apply_payee_match
 
 router = APIRouter()
@@ -43,6 +49,61 @@ def list_transactions(
     ).all()
 
 
+@router.get("/balance-before")
+def get_balance_before(
+    account_id: int = Query(...),
+    before_date: date = Query(...),
+    db: Session = Depends(get_db)
+):
+    """Sum of all transactions in an account before the given date."""
+    from sqlalchemy import func
+    result = db.query(func.coalesce(func.sum(Transaction.amount_cents), 0)).filter(
+        Transaction.account_id == account_id,
+        Transaction.posted_date < before_date
+    ).scalar()
+    return {"balance_cents": result}
+
+
+@router.get("/find-transfer-match", response_model=list[TransferMatchResponse])
+def find_transfer_match(
+    source_account_id: int = Query(...),
+    target_account_id: int = Query(...),
+    amount_cents: int = Query(...),
+    posted_date: date = Query(...),
+    db: Session = Depends(get_db)
+):
+    """Find potential matching transactions in the target account for transfer linking."""
+    dest_account = db.query(Account).filter(Account.id == target_account_id).first()
+    if not dest_account:
+        raise HTTPException(status_code=404, detail="Destination account not found")
+
+    window_start = posted_date - timedelta(days=3)
+    window_end = posted_date + timedelta(days=3)
+
+    matches = db.query(Transaction).filter(
+        Transaction.account_id == target_account_id,
+        Transaction.amount_cents == abs(amount_cents),
+        Transaction.posted_date >= window_start,
+        Transaction.posted_date <= window_end,
+        Transaction.transaction_type != TransactionType.TRANSFER,
+        Transaction.transfer_link_id.is_(None)
+    ).limit(5).all()
+
+    return [
+        TransferMatchResponse(
+            transaction_id=tx.id,
+            account_id=tx.account_id,
+            account_name=dest_account.name,
+            posted_date=tx.posted_date,
+            amount_cents=tx.amount_cents,
+            payee_raw=tx.payee_raw,
+            display_name=tx.display_name,
+            memo=tx.memo
+        )
+        for tx in matches
+    ]
+
+
 @router.get("/{transaction_id}", response_model=TransactionResponse)
 def get_transaction(transaction_id: int, db: Session = Depends(get_db)):
     """Get a single transaction by ID."""
@@ -55,6 +116,7 @@ def get_transaction(transaction_id: int, db: Session = Depends(get_db)):
 @router.post("/", response_model=TransactionResponse, status_code=201)
 def create_transaction(
     transaction: TransactionCreate,
+    delete_match_id: int | None = Query(None),
     db: Session = Depends(get_db)
 ):
     """Create a new transaction."""
@@ -62,6 +124,13 @@ def create_transaction(
     account = db.query(Account).filter(Account.id == transaction.account_id).first()
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
+
+    # Delete matched transaction if specified (for transfer linking)
+    if delete_match_id and transaction.transfer_to_account_id:
+        match_tx = db.query(Transaction).filter(Transaction.id == delete_match_id).first()
+        if match_tx:
+            db.delete(match_tx)
+            db.flush()
 
     # Handle transfer transactions
     if transaction.transfer_to_account_id:
@@ -86,11 +155,13 @@ def _create_transfer(transaction: TransactionCreate, db: Session) -> Transaction
         raise HTTPException(status_code=404, detail="Destination account not found")
 
     # Create outflow transaction (negative amount)
+    source_account = db.query(Account).filter(Account.id == transaction.account_id).first()
     outflow = Transaction(
         account_id=transaction.account_id,
         posted_date=transaction.posted_date,
         amount_cents=-abs(transaction.amount_cents),
         payee_normalized=f"Transfer to {dest_account.name}",
+        display_name=f"Transfer to {dest_account.name}",
         memo=transaction.memo,
         transaction_type=TransactionType.TRANSFER,
         source=transaction.source
@@ -99,12 +170,12 @@ def _create_transfer(transaction: TransactionCreate, db: Session) -> Transaction
     db.flush()
 
     # Create inflow transaction (positive amount)
-    source_account = db.query(Account).filter(Account.id == transaction.account_id).first()
     inflow = Transaction(
         account_id=transaction.transfer_to_account_id,
         posted_date=transaction.posted_date,
         amount_cents=abs(transaction.amount_cents),
         payee_normalized=f"Transfer from {source_account.name}",
+        display_name=f"Transfer from {source_account.name}",
         memo=transaction.memo,
         transaction_type=TransactionType.TRANSFER,
         source=transaction.source,
@@ -119,6 +190,86 @@ def _create_transfer(transaction: TransactionCreate, db: Session) -> Transaction
     db.refresh(outflow)
 
     return outflow
+
+
+@router.post("/{transaction_id}/convert-to-transfer", response_model=TransactionResponse)
+def convert_to_transfer(
+    transaction_id: int,
+    request: ConvertToTransferRequest,
+    db: Session = Depends(get_db)
+):
+    """Convert a regular transaction into a transfer with a linked counterpart."""
+    tx = db.query(Transaction).filter(Transaction.id == transaction_id).first()
+    if not tx:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    if tx.transaction_type == TransactionType.TRANSFER:
+        raise HTTPException(status_code=400, detail="Transaction is already a transfer")
+
+    target_account = db.query(Account).filter(Account.id == request.target_account_id).first()
+    if not target_account:
+        raise HTTPException(status_code=404, detail="Target account not found")
+
+    source_account = db.query(Account).filter(Account.id == tx.account_id).first()
+
+    # Convert the original transaction to outflow
+    tx.transaction_type = TransactionType.TRANSFER
+    tx.amount_cents = -abs(tx.amount_cents)
+    tx.payee_normalized = f"Transfer to {target_account.name}"
+    tx.display_name = f"Transfer to {target_account.name}"
+    tx.payee_raw = None
+    tx.category_id = None
+    db.flush()
+
+    # Create the linked counterpart (inflow)
+    linked = Transaction(
+        account_id=request.target_account_id,
+        posted_date=tx.posted_date,
+        amount_cents=abs(tx.amount_cents),
+        payee_normalized=f"Transfer from {source_account.name}",
+        display_name=f"Transfer from {source_account.name}",
+        memo=tx.memo,
+        transaction_type=TransactionType.TRANSFER,
+        source=tx.source,
+        transfer_link_id=tx.id
+    )
+    db.add(linked)
+    db.flush()
+
+    tx.transfer_link_id = linked.id
+    db.flush()
+    db.refresh(tx)
+    return tx
+
+
+@router.post("/categorize-by-payee")
+def categorize_by_payee(
+    request: dict,
+    db: Session = Depends(get_db)
+):
+    """Set category on all uncategorized transactions matching a payee."""
+    payee = request.get("payee", "")
+    category_id = request.get("category_id")
+    account_id = request.get("account_id")
+
+    if not payee or not category_id or not account_id:
+        raise HTTPException(status_code=400, detail="payee, category_id, and account_id are required")
+
+    # Match on payee_raw or display_name
+    from sqlalchemy import or_
+    matches = db.query(Transaction).filter(
+        Transaction.account_id == account_id,
+        Transaction.category_id.is_(None),
+        or_(
+            Transaction.payee_raw == payee,
+            Transaction.display_name == payee
+        )
+    ).all()
+
+    for tx in matches:
+        tx.category_id = category_id
+
+    db.flush()
+    return {"updated_count": len(matches)}
 
 
 @router.patch("/{transaction_id}", response_model=TransactionResponse)

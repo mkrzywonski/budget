@@ -314,6 +314,28 @@ function PayeeForm({
           />
         </div>
 
+        {/* Default Category */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Default Category
+          </label>
+          <select
+            value={defaultCategoryId ?? ''}
+            onChange={(e) => {
+              const value = e.target.value
+              setDefaultCategoryId(value ? Number(value) : null)
+            }}
+            className="w-full px-3 py-2 border border-gray-300 rounded"
+          >
+            <option value="">None</option>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* Match patterns */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -361,27 +383,6 @@ function PayeeForm({
           >
             + Add another pattern
           </button>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Default Category
-          </label>
-          <select
-            value={defaultCategoryId ?? ''}
-            onChange={(e) => {
-              const value = e.target.value
-              setDefaultCategoryId(value ? Number(value) : null)
-            }}
-            className="w-full px-3 py-2 border border-gray-300 rounded"
-          >
-            <option value="">None</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
         </div>
 
         <div className="border-t pt-3">

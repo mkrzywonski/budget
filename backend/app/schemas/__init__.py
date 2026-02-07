@@ -1,8 +1,15 @@
 from .account import AccountCreate, AccountUpdate, AccountResponse
-from .transaction import TransactionCreate, TransactionUpdate, TransactionResponse
+from .transaction import (
+    TransactionCreate,
+    TransactionUpdate,
+    TransactionResponse,
+    ConvertToTransferRequest,
+    TransferMatchResponse,
+)
 from .category import CategoryCreate, CategoryUpdate, CategoryResponse
 from .import_schemas import (
     CSVUploadRequest,
+    OFXUploadRequest,
     CSVPreviewResponse,
     ImportCommitRequest,
     ImportCommitResponse,
@@ -17,10 +24,13 @@ __all__ = [
     "TransactionCreate",
     "TransactionUpdate",
     "TransactionResponse",
+    "ConvertToTransferRequest",
+    "TransferMatchResponse",
     "CategoryCreate",
     "CategoryUpdate",
     "CategoryResponse",
     "CSVUploadRequest",
+    "OFXUploadRequest",
     "CSVPreviewResponse",
     "ImportCommitRequest",
     "ImportCommitResponse",

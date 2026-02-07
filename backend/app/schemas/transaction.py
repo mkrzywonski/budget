@@ -38,6 +38,23 @@ class TransactionUpdate(BaseModel):
     is_cleared: bool | None = None
 
 
+class ConvertToTransferRequest(BaseModel):
+    """Request to convert a regular transaction into a transfer."""
+    target_account_id: int
+
+
+class TransferMatchResponse(BaseModel):
+    """A potential matching transaction in the destination account."""
+    transaction_id: int
+    account_id: int
+    account_name: str
+    posted_date: date
+    amount_cents: int
+    payee_raw: str | None = None
+    display_name: str | None = None
+    memo: str | None = None
+
+
 class TransactionResponse(TransactionBase):
     """Transaction response with all fields."""
     id: int

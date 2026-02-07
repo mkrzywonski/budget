@@ -1,8 +1,9 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { format } from 'date-fns'
 import clsx from 'clsx'
 import {
   usePreviewCSV,
+  usePreviewOFX,
   useCommitImport,
   useSaveProfile,
   useImportProfiles,
@@ -30,6 +31,7 @@ export default function ImportModal({
   const [step, setStep] = useState<Step>('upload')
   const [fileContent, setFileContent] = useState('')
   const [fileName, setFileName] = useState('')
+  const [fileType, setFileType] = useState<'csv' | 'ofx'>('csv')
   const [delimiter, setDelimiter] = useState(',')
   const [skipRows, setSkipRows] = useState(0)
   const [hasHeader, setHasHeader] = useState(true)
@@ -49,8 +51,19 @@ export default function ImportModal({
   const { data: profiles } = useImportProfiles(accountId)
   const savedProfile = profiles?.[0] ?? null
   const previewMutation = usePreviewCSV()
+  const previewOFXMutation = usePreviewOFX()
   const commitMutation = useCommitImport()
   const saveProfileMutation = useSaveProfile()
+
+  // Default to using saved settings when they exist
+  useEffect(() => {
+    if (savedProfile) {
+      setUseSavedSettings(true)
+      setDelimiter(savedProfile.delimiter || ',')
+      setSkipRows(savedProfile.skip_rows || 0)
+      setHasHeader(savedProfile.has_header)
+    }
+  }, [savedProfile])
 
   const handleUseSavedSettings = (use: boolean) => {
     setUseSavedSettings(use)
@@ -70,6 +83,9 @@ export default function ImportModal({
     if (!file) return
 
     setFileName(file.name)
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    setFileType(ext === 'ofx' || ext === 'qfx' ? 'ofx' : 'csv')
+
     const reader = new FileReader()
     reader.onload = (event) => {
       setFileContent(event.target?.result as string)
@@ -79,6 +95,16 @@ export default function ImportModal({
 
   const handlePreview = async () => {
     if (!fileContent) return
+
+    if (fileType === 'ofx') {
+      const result = await previewOFXMutation.mutateAsync({
+        content: fileContent,
+        account_id: accountId,
+      })
+      setPreview(result)
+      setStep('preview')
+      return
+    }
 
     const useProfile = useSavedSettings && savedProfile
 
@@ -210,7 +236,8 @@ export default function ImportModal({
       account_id: accountId,
       batch_id: preview.batch_id,
       transactions: allTransactions,
-      accepted_duplicate_indices: Array.from(acceptedDuplicates)
+      accepted_duplicate_indices: Array.from(acceptedDuplicates),
+      source: fileType === 'ofx' ? 'import_qfx' : 'import_csv'
     })
 
     // Save import settings if requested
@@ -256,6 +283,7 @@ export default function ImportModal({
           {step === 'upload' && (
             <UploadStep
               fileName={fileName}
+              fileType={fileType}
               onFileSelect={handleFileSelect}
               hasSavedSettings={!!savedProfile}
               useSavedSettings={useSavedSettings}
@@ -290,7 +318,7 @@ export default function ImportModal({
               onRejectAll={handleRejectAllDuplicates}
               saveSettings={saveSettings}
               onSaveSettingsChange={setSaveSettings}
-              showSaveSettings={!useSavedSettings}
+              showSaveSettings={fileType === 'csv' && !useSavedSettings}
             />
           )}
 
@@ -304,7 +332,7 @@ export default function ImportModal({
           <div>
             {step !== 'upload' && step !== 'complete' && (
               <button
-                onClick={() => setStep(step === 'preview' ? 'mapping' : 'upload')}
+                onClick={() => setStep(step === 'preview' ? (fileType === 'ofx' ? 'upload' : 'mapping') : 'upload')}
                 className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
               >
                 Back
@@ -315,10 +343,10 @@ export default function ImportModal({
             {step === 'upload' && (
               <button
                 onClick={handlePreview}
-                disabled={!fileContent || previewMutation.isPending}
+                disabled={!fileContent || previewMutation.isPending || previewOFXMutation.isPending}
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
               >
-                {previewMutation.isPending ? 'Processing...' : 'Continue'}
+                {previewMutation.isPending || previewOFXMutation.isPending ? 'Processing...' : 'Continue'}
               </button>
             )}
             {step === 'mapping' && (
@@ -358,12 +386,14 @@ export default function ImportModal({
 
 function UploadStep({
   fileName,
+  fileType,
   onFileSelect,
   hasSavedSettings,
   useSavedSettings,
   onUseSavedSettingsChange
 }: {
   fileName: string
+  fileType: 'csv' | 'ofx'
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void
   hasSavedSettings: boolean
   useSavedSettings: boolean
@@ -373,12 +403,12 @@ function UploadStep({
     <div className="space-y-6">
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Select CSV File
+          Select File
         </label>
         <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
           <input
             type="file"
-            accept=".csv,.txt"
+            accept=".csv,.txt,.ofx,.qfx"
             onChange={onFileSelect}
             className="hidden"
             id="csv-upload"
@@ -389,10 +419,11 @@ function UploadStep({
           >
             {fileName || 'Click to select a file'}
           </label>
+          <p className="text-xs text-gray-400 mt-2">CSV, OFX, or QFX</p>
         </div>
       </div>
 
-      {hasSavedSettings && (
+      {hasSavedSettings && fileType === 'csv' && (
         <label className="flex items-center gap-2">
           <input
             type="checkbox"

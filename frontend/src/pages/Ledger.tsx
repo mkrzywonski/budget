@@ -1,17 +1,21 @@
-import { useState, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { format, startOfMonth, addMonths, subMonths, parseISO } from 'date-fns'
-import { useAccount } from '../hooks/useAccounts'
+import { useAccount, useAccounts } from '../hooks/useAccounts'
 import {
   useTransactions,
+  useBalanceBefore,
   useCreateTransaction,
   useUpdateTransaction,
-  useDeleteTransaction
+  useDeleteTransaction,
+  useCategorizeByPayee,
+  useFindTransferMatch,
+  useConvertToTransfer
 } from '../hooks/useTransactions'
 import { useCreatePayee } from '../hooks/usePayees'
 import { usePayees } from '../hooks/usePayees'
 import { useCategories } from '../hooks/useCategories'
-import { Transaction, Category } from '../api/client'
+import { Transaction, Account, Category, TransferMatch } from '../api/client'
 import { formatCurrency, parseCurrency } from '../utils/format'
 import ImportModal from '../components/ImportModal'
 import clsx from 'clsx'
@@ -62,9 +66,19 @@ export default function Ledger() {
     month: currentDate.getMonth() + 1
   })
 
+  // Opening balance = sum of all transactions before this month
+  const monthStart = format(currentDate, 'yyyy-MM-dd')
+  const { data: balanceBeforeData } = useBalanceBefore(id, monthStart)
+  const openingBalance = balanceBeforeData?.balance_cents ?? 0
+
+  const showBalance = sortField === 'posted_date' && sortDir === 'asc'
+
+  const { data: accounts } = useAccounts()
   const createMutation = useCreateTransaction()
   const updateMutation = useUpdateTransaction()
   const deleteMutation = useDeleteTransaction()
+  const convertToTransferMutation = useConvertToTransfer()
+  const categorizeByPayeeMutation = useCategorizeByPayee()
   const createPayeeMutation = useCreatePayee()
   const { data: payees } = usePayees()
   const { data: categories } = useCategories()
@@ -134,20 +148,20 @@ export default function Ledger() {
     return list
   }, [transactions, sortField, sortDir])
 
-  // Calculate running balance (always by date order, regardless of sort)
+  // Calculate running balance starting from the opening balance
   const balanceMap = useMemo(() => {
     if (!transactions) return new Map<number, number>()
     const byDate = [...transactions].sort((a, b) =>
-      a.posted_date.localeCompare(b.posted_date)
+      a.posted_date.localeCompare(b.posted_date) || a.created_at.localeCompare(b.created_at)
     )
     const map = new Map<number, number>()
-    let balance = 0
+    let balance = openingBalance
     for (const tx of byDate) {
       balance += tx.amount_cents
       map.set(tx.id, balance)
     }
     return map
-  }, [transactions])
+  }, [transactions, openingBalance])
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -180,16 +194,25 @@ export default function Ledger() {
     memo: string
     type: TxType
     category_id: number | null
+    transfer_to_account_id?: number
+    delete_match_id?: number
   }) => {
     setLastType(data.type)
     await createMutation.mutateAsync({
       account_id: id,
       posted_date: data.posted_date,
       amount_cents: applyTypeSign(data.type, data.amount_cents),
-      payee_raw: data.payee_raw || undefined,
+      payee_raw: data.type !== 'transfer' ? (data.payee_raw || undefined) : undefined,
       memo: data.memo || undefined,
-      category_id: data.category_id ?? undefined
+      category_id: data.type !== 'transfer' ? (data.category_id ?? undefined) : undefined,
+      transfer_to_account_id: data.transfer_to_account_id,
+      delete_match_id: data.delete_match_id
     })
+  }
+
+  const handleConvertToTransfer = async (txId: number, targetAccountId: number) => {
+    await convertToTransferMutation.mutateAsync({ id: txId, target_account_id: targetAccountId })
+    setEditingId(null)
   }
 
   const handleUpdate = async (
@@ -209,6 +232,16 @@ export default function Ledger() {
 
   const handleDelete = async (txId: number) => {
     await deleteMutation.mutateAsync(txId)
+  }
+
+  const handleCategorize = async (tx: Transaction, categoryId: number) => {
+    const payee = tx.display_name || tx.payee_raw
+    if (!payee) return
+    await categorizeByPayeeMutation.mutateAsync({
+      account_id: id,
+      payee,
+      category_id: categoryId
+    })
   }
 
   const prevMonth = () => setCurrentDate((d) => subMonths(d, 1))
@@ -313,7 +346,7 @@ export default function Ledger() {
                 >
                   Amount{sortIndicator('amount_cents')}
                 </th>
-                <th className="px-4 py-2 text-right w-28">Balance</th>
+                {showBalance && <th className="px-4 py-2 text-right w-28">Balance</th>}
                 <th className="px-4 py-2 w-24"></th>
               </tr>
             </thead>
@@ -321,7 +354,7 @@ export default function Ledger() {
               {sorted.length === 0 && (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={showBalance ? 8 : 7}
                     className="px-4 py-8 text-center text-gray-500"
                   >
                     No transactions this month
@@ -334,18 +367,25 @@ export default function Ledger() {
                     key={tx.id}
                     transaction={tx}
                     categories={categories || []}
+                    accounts={accounts || []}
+                    currentAccountId={id}
+                    showBalance={showBalance}
                     onSave={(data) => handleUpdate(tx.id, data)}
+                    onConvertToTransfer={(targetAccountId) => handleConvertToTransfer(tx.id, targetAccountId)}
                     onCancel={() => setEditingId(null)}
                   />
                 ) : (
                   <TransactionRow
                     key={tx.id}
                     transaction={tx}
+                    categories={categories || []}
                     categoryMap={categoryMap}
                     runningBalance={balanceMap.get(tx.id) ?? 0}
+                    showBalance={showBalance}
                     onEdit={() => setEditingId(tx.id)}
                     onDelete={() => handleDelete(tx.id)}
                     onAddPayee={() => handleAddPayee(tx)}
+                    onCategorize={(catId) => handleCategorize(tx, catId)}
                   />
                 )
               )}
@@ -354,6 +394,9 @@ export default function Ledger() {
                 defaultDate={entryDefaultDate}
                 defaultType={lastType}
                 categories={categories || []}
+                accounts={accounts || []}
+                currentAccountId={id}
+                showBalance={showBalance}
                 onSubmit={handleCreate}
                 isPending={createMutation.isPending}
                 payeeSuggestions={payeeSuggestions}
@@ -387,20 +430,26 @@ export default function Ledger() {
 
 interface TransactionRowProps {
   transaction: Transaction
+  categories: Category[]
   categoryMap: Map<number, string>
   runningBalance: number
+  showBalance: boolean
   onEdit: () => void
   onDelete: () => void
   onAddPayee: () => void
+  onCategorize: (categoryId: number) => void
 }
 
 function TransactionRow({
   transaction: tx,
+  categories,
   categoryMap,
   runningBalance,
+  showBalance,
   onEdit,
   onDelete,
-  onAddPayee
+  onAddPayee,
+  onCategorize
 }: TransactionRowProps) {
   const isForecast = tx.transaction_type === 'forecast'
 
@@ -421,7 +470,27 @@ function TransactionRow({
         {tx.display_name || tx.payee_raw || '—'}
       </td>
       <td className="px-4 py-2 text-sm text-gray-500">
-        {tx.category_id ? categoryMap.get(tx.category_id) || '—' : '—'}
+        {tx.category_id ? (
+          categoryMap.get(tx.category_id) || '—'
+        ) : (
+          <select
+            value=""
+            onChange={(e) => {
+              if (e.target.value) onCategorize(Number(e.target.value))
+            }}
+            className="w-full px-1 py-0.5 text-sm border border-gray-200 rounded bg-transparent text-gray-400 hover:border-gray-400 cursor-pointer"
+          >
+            <option value="">—</option>
+            {categories.filter((c) => !c.parent_id).map((parent) => (
+              <optgroup key={parent.id} label={parent.name}>
+                <option value={parent.id}>{parent.name}</option>
+                {categories.filter((c) => c.parent_id === parent.id).map((child) => (
+                  <option key={child.id} value={child.id}>{child.name}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        )}
       </td>
       <td className="px-4 py-2 text-sm text-gray-500 truncate max-w-xs">
         {tx.memo || ''}
@@ -434,9 +503,11 @@ function TransactionRow({
       >
         {formatCurrency(tx.amount_cents)}
       </td>
-      <td className="px-4 py-2 text-right font-mono text-sm">
-        {formatCurrency(runningBalance)}
-      </td>
+      {showBalance && (
+        <td className="px-4 py-2 text-right font-mono text-sm">
+          {formatCurrency(runningBalance)}
+        </td>
+      )}
       <td className="px-4 py-1 text-right">
         <div className="invisible group-hover:visible flex justify-end gap-1">
           <button
@@ -522,6 +593,9 @@ function TransactionRow({
 interface EditRowProps {
   transaction: Transaction
   categories: Category[]
+  accounts: Account[]
+  currentAccountId: number
+  showBalance: boolean
   onSave: (data: {
     posted_date: string
     amount_cents: number
@@ -529,10 +603,12 @@ interface EditRowProps {
     memo: string
     category_id: number | null
   }) => void
+  onConvertToTransfer: (targetAccountId: number) => void
   onCancel: () => void
 }
 
-function EditRow({ transaction: tx, categories, onSave, onCancel }: EditRowProps) {
+function EditRow({ transaction: tx, categories, accounts, currentAccountId, showBalance, onSave, onConvertToTransfer, onCancel }: EditRowProps) {
+  const isExistingTransfer = tx.transaction_type === 'transfer'
   const [date, setDate] = useState(tx.posted_date)
   const [type, setType] = useState<TxType>(deriveTxType(tx))
   const [payee, setPayee] = useState(tx.payee_raw || '')
@@ -541,8 +617,17 @@ function EditRow({ transaction: tx, categories, onSave, onCancel }: EditRowProps
     (Math.abs(tx.amount_cents) / 100).toFixed(2)
   )
   const [categoryId, setCategoryId] = useState<number | null>(tx.category_id)
+  const [transferAccountId, setTransferAccountId] = useState<number | null>(null)
+
+  const otherAccounts = accounts.filter(a => a.id !== currentAccountId)
 
   const doSave = () => {
+    // Converting a non-transfer to transfer
+    if (type === 'transfer' && !isExistingTransfer) {
+      if (!transferAccountId) return
+      onConvertToTransfer(transferAccountId)
+      return
+    }
     const cents = parseCurrency(amount)
     onSave({
       posted_date: date,
@@ -570,41 +655,66 @@ function EditRow({ transaction: tx, categories, onSave, onCancel }: EditRowProps
         />
       </td>
       <td className="px-4 py-1">
-        <select
-          value={type}
-          onChange={(e) => setType(e.target.value as TxType)}
-          className="w-full px-1 py-1 text-sm border border-gray-300 rounded"
-        >
-          <option value="debit">Debit</option>
-          <option value="credit">Credit</option>
-          <option value="transfer">Transfer</option>
-        </select>
+        {isExistingTransfer ? (
+          <span className="text-sm text-purple-600 font-medium px-1">Transfer</span>
+        ) : (
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value as TxType)}
+            className="w-full px-1 py-1 text-sm border border-gray-300 rounded"
+          >
+            <option value="debit">Debit</option>
+            <option value="credit">Credit</option>
+            <option value="transfer">Transfer</option>
+          </select>
+        )}
       </td>
       <td className="px-4 py-1">
-        <input
-          type="text"
-          value={payee}
-          onChange={(e) => setPayee(e.target.value)}
-          onKeyDown={handleKeyDown}
-          className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
-        />
+        {isExistingTransfer ? (
+          <span className="text-sm text-purple-600 px-2">
+            {tx.display_name || tx.payee_normalized || 'Transfer'}
+          </span>
+        ) : type === 'transfer' ? (
+          <select
+            value={transferAccountId ?? ''}
+            onChange={(e) => setTransferAccountId(e.target.value ? Number(e.target.value) : null)}
+            className="w-full px-1 py-1 text-sm border border-gray-300 rounded"
+          >
+            <option value="">Select account...</option>
+            {otherAccounts.map(a => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+        ) : (
+          <input
+            type="text"
+            value={payee}
+            onChange={(e) => setPayee(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+          />
+        )}
       </td>
       <td className="px-4 py-1">
-        <select
-          value={categoryId ?? ''}
-          onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : null)}
-          className="w-full px-1 py-1 text-sm border border-gray-300 rounded"
-        >
-          <option value="">—</option>
-          {categories.filter((c) => !c.parent_id).map((parent) => (
-            <optgroup key={parent.id} label={parent.name}>
-              <option value={parent.id}>{parent.name}</option>
-              {categories.filter((c) => c.parent_id === parent.id).map((child) => (
-                <option key={child.id} value={child.id}>{child.name}</option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
+        {type === 'transfer' ? (
+          <span className="text-sm text-gray-400 px-1">—</span>
+        ) : (
+          <select
+            value={categoryId ?? ''}
+            onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : null)}
+            className="w-full px-1 py-1 text-sm border border-gray-300 rounded"
+          >
+            <option value="">—</option>
+            {categories.filter((c) => !c.parent_id).map((parent) => (
+              <optgroup key={parent.id} label={parent.name}>
+                <option value={parent.id}>{parent.name}</option>
+                {categories.filter((c) => c.parent_id === parent.id).map((child) => (
+                  <option key={child.id} value={child.id}>{child.name}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        )}
       </td>
       <td className="px-4 py-1">
         <input
@@ -624,7 +734,7 @@ function EditRow({ transaction: tx, categories, onSave, onCancel }: EditRowProps
           className="w-full px-2 py-1 text-sm text-right font-mono border border-gray-300 rounded"
         />
       </td>
-      <td className="px-4 py-1"></td>
+      {showBalance && <td className="px-4 py-1"></td>}
       <td className="px-4 py-1 text-right">
         <div className="flex justify-end gap-1">
           <button
@@ -677,6 +787,9 @@ interface EntryRowProps {
   defaultDate: string
   defaultType: TxType
   categories: Category[]
+  accounts: Account[]
+  currentAccountId: number
+  showBalance: boolean
   onSubmit: (data: {
     posted_date: string
     amount_cents: number
@@ -684,6 +797,8 @@ interface EntryRowProps {
     memo: string
     type: TxType
     category_id: number | null
+    transfer_to_account_id?: number
+    delete_match_id?: number
   }) => Promise<void>
   isPending: boolean
   payeeSuggestions: string[]
@@ -693,6 +808,9 @@ function EntryRow({
   defaultDate,
   defaultType,
   categories,
+  accounts,
+  currentAccountId,
+  showBalance,
   onSubmit,
   isPending,
   payeeSuggestions
@@ -707,6 +825,14 @@ function EntryRow({
   const [activeIndex, setActiveIndex] = useState(-1)
   const dateRef = useRef<HTMLInputElement>(null)
 
+  // Transfer-specific state
+  const [transferAccountId, setTransferAccountId] = useState<number | null>(null)
+  const [transferMatch, setTransferMatch] = useState<TransferMatch | null>(null)
+  const [deleteMatchId, setDeleteMatchId] = useState<number | null>(null)
+  const findMatch = useFindTransferMatch()
+
+  const otherAccounts = accounts.filter(a => a.id !== currentAccountId)
+
   // Sync default type when parent updates it (after a submission)
   const prevDefault = useRef(defaultType)
   if (prevDefault.current !== defaultType) {
@@ -714,7 +840,41 @@ function EntryRow({
     setType(defaultType)
   }
 
-  const isEmpty = !payee && !amount
+  // Reset transfer state when switching away from transfer type
+  const prevType = useRef(type)
+  if (prevType.current !== type) {
+    prevType.current = type
+    if (type !== 'transfer') {
+      setTransferAccountId(null)
+      setTransferMatch(null)
+      setDeleteMatchId(null)
+    }
+  }
+
+  // Search for matching transactions in target account
+  useEffect(() => {
+    if (type !== 'transfer' || !transferAccountId || !amount) {
+      setTransferMatch(null)
+      setDeleteMatchId(null)
+      return
+    }
+    const cents = parseCurrency(amount)
+    if (cents <= 0) return
+
+    findMatch.mutateAsync({
+      source_account_id: currentAccountId,
+      target_account_id: transferAccountId,
+      amount_cents: cents,
+      posted_date: date
+    }).then(matches => {
+      setTransferMatch(matches.length > 0 ? matches[0] : null)
+      setDeleteMatchId(null)
+    }).catch(() => {
+      setTransferMatch(null)
+    })
+  }, [type, transferAccountId, amount, date])
+
+  const isEmpty = type === 'transfer' ? !transferAccountId || !amount : !payee && !amount
 
   const filteredSuggestions = useMemo(() => {
     if (!payee.trim()) return []
@@ -734,6 +894,7 @@ function EntryRow({
 
   const handleSubmit = async () => {
     if (!amount) return
+    if (type === 'transfer' && !transferAccountId) return
 
     await onSubmit({
       posted_date: date,
@@ -741,7 +902,9 @@ function EntryRow({
       payee_raw: payee,
       memo,
       type,
-      category_id: categoryId
+      category_id: categoryId,
+      transfer_to_account_id: type === 'transfer' ? transferAccountId! : undefined,
+      delete_match_id: type === 'transfer' && deleteMatchId ? deleteMatchId : undefined
     })
 
     // Reset fields but keep type sticky
@@ -749,6 +912,9 @@ function EntryRow({
     setMemo('')
     setAmount('')
     setCategoryId(null)
+    setTransferAccountId(null)
+    setTransferMatch(null)
+    setDeleteMatchId(null)
     dateRef.current?.focus()
   }
 
@@ -792,6 +958,7 @@ function EntryRow({
   }
 
   return (
+    <>
     <tr className="bg-gray-50/50 border-t-2 border-gray-200">
       <td className="px-4 py-1.5">
         <input
@@ -815,61 +982,79 @@ function EntryRow({
         </select>
       </td>
       <td className="px-4 py-1.5">
-        <div className="relative">
-          <input
-            type="text"
-            value={payee}
-            onChange={(e) => {
-              setPayee(e.target.value)
-              setShowSuggestions(true)
-              setActiveIndex(-1)
-            }}
-            onKeyDown={handlePayeeKeyDown}
-            onFocus={() => setShowSuggestions(true)}
-            onBlur={() => {
-              setTimeout(() => setShowSuggestions(false), 100)
-            }}
-            placeholder="Payee"
-            className="w-full px-2 py-1 text-sm border border-gray-300 rounded bg-white placeholder-gray-300"
-          />
-          {showSuggestions && filteredSuggestions.length > 0 && (
-            <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded shadow-sm max-h-48 overflow-auto">
-              {filteredSuggestions.map((name, index) => (
-                <button
-                  key={name}
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault()
-                    handlePayeeSelect(name)
-                  }}
-                  className={clsx(
-                    'w-full text-left px-2 py-1 text-sm hover:bg-gray-100',
-                    index === activeIndex && 'bg-gray-100'
-                  )}
-                >
-                  {name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        {type === 'transfer' ? (
+          <select
+            value={transferAccountId ?? ''}
+            onChange={(e) => setTransferAccountId(e.target.value ? Number(e.target.value) : null)}
+            onKeyDown={handleKeyDown}
+            className="w-full px-1 py-1 text-sm border border-gray-300 rounded bg-white"
+          >
+            <option value="">Select account...</option>
+            {otherAccounts.map(a => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+        ) : (
+          <div className="relative">
+            <input
+              type="text"
+              value={payee}
+              onChange={(e) => {
+                setPayee(e.target.value)
+                setShowSuggestions(true)
+                setActiveIndex(-1)
+              }}
+              onKeyDown={handlePayeeKeyDown}
+              onFocus={() => setShowSuggestions(true)}
+              onBlur={() => {
+                setTimeout(() => setShowSuggestions(false), 100)
+              }}
+              placeholder="Payee"
+              className="w-full px-2 py-1 text-sm border border-gray-300 rounded bg-white placeholder-gray-300"
+            />
+            {showSuggestions && filteredSuggestions.length > 0 && (
+              <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded shadow-sm max-h-48 overflow-auto">
+                {filteredSuggestions.map((name, index) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      handlePayeeSelect(name)
+                    }}
+                    className={clsx(
+                      'w-full text-left px-2 py-1 text-sm hover:bg-gray-100',
+                      index === activeIndex && 'bg-gray-100'
+                    )}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </td>
       <td className="px-4 py-1.5">
-        <select
-          value={categoryId ?? ''}
-          onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : null)}
-          className="w-full px-1 py-1 text-sm border border-gray-300 rounded bg-white"
-        >
-          <option value="">—</option>
-          {categories.filter((c) => !c.parent_id).map((parent) => (
-            <optgroup key={parent.id} label={parent.name}>
-              <option value={parent.id}>{parent.name}</option>
-              {categories.filter((c) => c.parent_id === parent.id).map((child) => (
-                <option key={child.id} value={child.id}>{child.name}</option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
+        {type === 'transfer' ? (
+          <span className="text-sm text-gray-400 px-1">—</span>
+        ) : (
+          <select
+            value={categoryId ?? ''}
+            onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : null)}
+            className="w-full px-1 py-1 text-sm border border-gray-300 rounded bg-white"
+          >
+            <option value="">—</option>
+            {categories.filter((c) => !c.parent_id).map((parent) => (
+              <optgroup key={parent.id} label={parent.name}>
+                <option value={parent.id}>{parent.name}</option>
+                {categories.filter((c) => c.parent_id === parent.id).map((child) => (
+                  <option key={child.id} value={child.id}>{child.name}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        )}
       </td>
       <td className="px-4 py-1.5">
         <input
@@ -891,7 +1076,7 @@ function EntryRow({
           className="w-full px-2 py-1 text-sm text-right font-mono border border-gray-300 rounded bg-white placeholder-gray-300"
         />
       </td>
-      <td className="px-4 py-1.5"></td>
+      {showBalance && <td className="px-4 py-1.5"></td>}
       <td className="px-4 py-1.5 text-right">
         <button
           onClick={handleSubmit}
@@ -902,5 +1087,42 @@ function EntryRow({
         </button>
       </td>
     </tr>
+    {transferMatch && !deleteMatchId && (
+      <tr className="bg-yellow-50">
+        <td colSpan={showBalance ? 8 : 7} className="px-4 py-2 text-sm">
+          <div className="flex items-center justify-between">
+            <span>
+              Found matching {formatCurrency(transferMatch.amount_cents)} transaction
+              in <strong>{transferMatch.account_name}</strong> on{' '}
+              {format(parseISO(transferMatch.posted_date), 'MM/dd/yyyy')}
+              {transferMatch.payee_raw && <> ({transferMatch.payee_raw})</>}
+              {' '}&mdash; link as transfer?
+            </span>
+            <div className="flex gap-2 ml-4">
+              <button
+                onClick={() => setDeleteMatchId(transferMatch.transaction_id)}
+                className="px-2 py-0.5 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+              >
+                Yes
+              </button>
+              <button
+                onClick={() => setTransferMatch(null)}
+                className="px-2 py-0.5 text-xs border border-gray-300 rounded hover:bg-gray-100"
+              >
+                No
+              </button>
+            </div>
+          </div>
+        </td>
+      </tr>
+    )}
+    {deleteMatchId && (
+      <tr className="bg-green-50">
+        <td colSpan={showBalance ? 8 : 7} className="px-4 py-2 text-sm text-green-700">
+          Matching transaction will be replaced when you click Add.
+        </td>
+      </tr>
+    )}
+    </>
   )
 }

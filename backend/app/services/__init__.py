@@ -1,4 +1,5 @@
 from .csv_parser import CSVParser, ParsedTransaction, parse_csv_file
+from .ofx_parser import parse_ofx_file
 from .import_service import ImportService
 from .payee_matcher import (
     match_payee,
@@ -14,6 +15,7 @@ __all__ = [
     "CSVParser",
     "ParsedTransaction",
     "parse_csv_file",
+    "parse_ofx_file",
     "ImportService",
     "match_payee",
     "match_payee_record",

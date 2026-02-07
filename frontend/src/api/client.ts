@@ -77,6 +77,17 @@ export interface Transaction {
   updated_at: string
 }
 
+export interface TransferMatch {
+  transaction_id: number
+  account_id: number
+  account_name: string
+  posted_date: string
+  amount_cents: number
+  payee_raw: string | null
+  display_name: string | null
+  memo: string | null
+}
+
 export interface Category {
   id: number
   name: string

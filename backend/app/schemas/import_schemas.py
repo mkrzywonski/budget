@@ -94,12 +94,19 @@ class CSVPreviewResponse(BaseModel):
     matched_profile_name: str | None = None
 
 
+class OFXUploadRequest(BaseModel):
+    """Request to parse an OFX/QFX file."""
+    content: str
+    account_id: int
+
+
 class ImportCommitRequest(BaseModel):
     """Request to commit an import."""
     account_id: int
     batch_id: str
     transactions: list[ParsedTransactionResponse]
     accepted_duplicate_indices: list[int] = []
+    source: str = "import_csv"
 
 
 class ImportCommitResponse(BaseModel):

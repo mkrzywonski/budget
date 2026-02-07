@@ -94,6 +94,15 @@ export function usePreviewCSV() {
   })
 }
 
+export function usePreviewOFX() {
+  return useMutation({
+    mutationFn: (data: {
+      content: string
+      account_id: number
+    }) => api.post<CSVPreviewResponse>('/import/ofx/preview', data)
+  })
+}
+
 export function useCommitImport() {
   const queryClient = useQueryClient()
 
@@ -103,6 +112,7 @@ export function useCommitImport() {
       batch_id: string
       transactions: ParsedTransaction[]
       accepted_duplicate_indices?: number[]
+      source?: string
     }) => api.post<ImportCommitResponse>('/import/commit', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] })

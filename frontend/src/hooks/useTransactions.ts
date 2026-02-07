@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api, Transaction } from '../api/client'
+import { api, Transaction, TransferMatch } from '../api/client'
 
 interface TransactionFilters {
   accountId?: number
@@ -22,6 +22,16 @@ export function useTransactions(filters: TransactionFilters) {
   })
 }
 
+export function useBalanceBefore(accountId: number, beforeDate: string) {
+  return useQuery({
+    queryKey: ['balance-before', accountId, beforeDate],
+    queryFn: () => api.get<{ balance_cents: number }>(
+      `/transactions/balance-before?account_id=${accountId}&before_date=${beforeDate}`
+    ),
+    enabled: !!accountId && !!beforeDate
+  })
+}
+
 export function useCreateTransaction() {
   const queryClient = useQueryClient()
 
@@ -34,7 +44,12 @@ export function useCreateTransaction() {
       memo?: string
       category_id?: number
       transfer_to_account_id?: number
-    }) => api.post<Transaction>('/transactions/', data),
+      delete_match_id?: number
+    }) => {
+      const { delete_match_id, ...body } = data
+      const qs = delete_match_id ? `?delete_match_id=${delete_match_id}` : ''
+      return api.post<Transaction>(`/transactions/${qs}`, body)
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
     }
@@ -66,6 +81,52 @@ export function useDeleteTransaction() {
 
   return useMutation({
     mutationFn: (id: number) => api.delete(`/transactions/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] })
+    }
+  })
+}
+
+export function useCategorizeByPayee() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: {
+      account_id: number
+      payee: string
+      category_id: number
+    }) => api.post<{ updated_count: number }>('/transactions/categorize-by-payee', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] })
+    }
+  })
+}
+
+export function useFindTransferMatch() {
+  return useMutation({
+    mutationFn: (params: {
+      source_account_id: number
+      target_account_id: number
+      amount_cents: number
+      posted_date: string
+    }) => {
+      const qs = new URLSearchParams({
+        source_account_id: String(params.source_account_id),
+        target_account_id: String(params.target_account_id),
+        amount_cents: String(params.amount_cents),
+        posted_date: params.posted_date
+      })
+      return api.get<TransferMatch[]>(`/transactions/find-transfer-match?${qs}`)
+    }
+  })
+}
+
+export function useConvertToTransfer() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, target_account_id }: { id: number; target_account_id: number }) =>
+      api.post<Transaction>(`/transactions/${id}/convert-to-transfer`, { target_account_id }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
     }
