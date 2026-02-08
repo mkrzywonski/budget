@@ -37,13 +37,14 @@ app.add_middleware(
 # API routes
 app.include_router(api_router, prefix="/api")
 
-# Serve frontend static files in production
-frontend_dist = Path(__file__).parent.parent.parent / "frontend" / "dist"
-if frontend_dist.exists():
-    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
-
 
 @app.get("/health")
 def health_check():
     """Health check endpoint."""
     return {"status": "ok"}
+
+
+# Serve frontend static files in production (must be last — catches all unmatched routes)
+frontend_dist = Path(__file__).parent.parent.parent / "frontend" / "dist"
+if frontend_dist.exists():
+    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")

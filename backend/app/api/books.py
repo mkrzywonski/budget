@@ -1,8 +1,14 @@
+import shutil
+import sqlite3
+import tempfile
+from datetime import datetime
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, UploadFile, File
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from starlette.background import BackgroundTask
 
-from ..config import load_recent_books, add_recent_book, RecentBook
+from ..config import load_recent_books, add_recent_book, update_backup_timestamp, get_backup_status, rename_book, get_book_name, RecentBook
 from ..database import open_book, close_book, is_book_open, get_current_book_path
 
 router = APIRouter()
@@ -33,10 +39,13 @@ def get_recent_books():
 def get_book_status():
     """Get current book status."""
     path = get_current_book_path()
+    name = None
+    if path:
+        name = get_book_name(path) or path.stem
     return BookStatus(
         is_open=is_book_open(),
         path=str(path) if path else None,
-        name=path.stem if path else None
+        name=name,
     )
 
 
@@ -123,3 +132,104 @@ def close_current_book():
         raise HTTPException(status_code=400, detail="No book is open")
     close_book()
     return {"message": "Book closed"}
+
+
+class RenameRequest(BaseModel):
+    name: str
+
+
+@router.patch("/rename", response_model=BookStatus)
+def rename_current_book(req: RenameRequest):
+    """Rename the current book's display name."""
+    path = get_current_book_path()
+    if not path:
+        raise HTTPException(status_code=400, detail="No book is open")
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name cannot be empty")
+    rename_book(path, name)
+    return BookStatus(is_open=True, path=str(path), name=name)
+
+
+@router.get("/backup")
+def backup_book():
+    """Download a backup of the current book."""
+    book_path = get_current_book_path()
+    if not book_path:
+        raise HTTPException(status_code=400, detail="No book is open")
+
+    # Use SQLite online backup API for a consistent snapshot
+    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    tmp.close()
+    tmp_path = Path(tmp.name)
+
+    try:
+        src = sqlite3.connect(str(book_path))
+        dst = sqlite3.connect(str(tmp_path))
+        src.backup(dst)
+        src.close()
+        dst.close()
+    except Exception as e:
+        tmp_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=500, detail=f"Backup failed: {e}")
+
+    date_str = datetime.utcnow().strftime("%Y-%m-%d")
+    filename = f"{book_path.stem}_backup_{date_str}.db"
+
+    def cleanup_and_update():
+        tmp_path.unlink(missing_ok=True)
+        update_backup_timestamp(book_path)
+
+    return FileResponse(
+        path=str(tmp_path),
+        filename=filename,
+        media_type="application/octet-stream",
+        background=BackgroundTask(cleanup_and_update),
+    )
+
+
+@router.post("/restore")
+async def restore_book(file: UploadFile = File(...)):
+    """Restore a book from an uploaded backup file."""
+    book_path = get_current_book_path()
+    if not book_path:
+        raise HTTPException(status_code=400, detail="No book is open")
+
+    # Save upload to temp file
+    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    try:
+        contents = await file.read()
+        tmp.write(contents)
+        tmp.close()
+
+        # Validate the uploaded file
+        try:
+            conn = sqlite3.connect(tmp.name)
+            result = conn.execute("PRAGMA integrity_check").fetchone()
+            conn.close()
+            if result[0] != "ok":
+                raise HTTPException(status_code=400, detail="Uploaded file failed integrity check")
+        except sqlite3.DatabaseError:
+            raise HTTPException(status_code=400, detail="Uploaded file is not a valid SQLite database")
+
+        # Close current book, replace file, re-open
+        close_book()
+        shutil.copy2(tmp.name, str(book_path))
+        open_book(book_path)
+
+        return BookStatus(
+            is_open=True,
+            path=str(book_path),
+            name=book_path.stem,
+        )
+    finally:
+        Path(tmp.name).unlink(missing_ok=True)
+
+
+@router.get("/backup-status")
+def backup_status():
+    """Get backup status for the current book."""
+    book_path = get_current_book_path()
+    if not book_path:
+        raise HTTPException(status_code=400, detail="No book is open")
+    return get_backup_status(book_path)

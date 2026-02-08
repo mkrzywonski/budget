@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAccounts, useCreateAccount, useUpdateAccount, useDeleteAccount } from '../hooks/useAccounts'
+import { useBackupStatus, useBackupBook } from '../hooks/useBook'
 import { Account } from '../api/client'
 import { Link } from 'react-router-dom'
 
@@ -8,8 +9,12 @@ export default function Dashboard() {
   const createAccount = useCreateAccount()
   const updateAccount = useUpdateAccount()
   const deleteAccount = useDeleteAccount()
+  const { data: backupStatus } = useBackupStatus()
+  const backup = useBackupBook()
 
   const [showCreate, setShowCreate] = useState(false)
+  const [backupDismissed, setBackupDismissed] = useState(false)
+  const [backupDownloading, setBackupDownloading] = useState(false)
   const [name, setName] = useState('')
   const [accountType, setAccountType] = useState('checking')
   const [institution, setInstitution] = useState('')
@@ -94,8 +99,46 @@ export default function Dashboard() {
     )
   }
 
+  const showBackupReminder = !backupDismissed && backupStatus &&
+    (backupStatus.days_since_backup === null || backupStatus.days_since_backup > 90)
+
+  const handleBackupDownload = async () => {
+    setBackupDownloading(true)
+    try {
+      await backup.download()
+    } finally {
+      setBackupDownloading(false)
+    }
+  }
+
   return (
     <div className="p-6">
+      {showBackupReminder && (
+        <div className="mb-4 px-4 py-3 bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 rounded-lg flex items-center justify-between gap-4">
+          <span className="text-amber-800 dark:text-amber-200 text-sm">
+            {backupStatus.days_since_backup === null
+              ? 'This book has never been backed up.'
+              : `This book hasn't been backed up in ${backupStatus.days_since_backup} days.`}
+          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleBackupDownload}
+              disabled={backupDownloading}
+              className="text-sm px-3 py-1 bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50"
+            >
+              {backupDownloading ? 'Downloading...' : 'Download Backup'}
+            </button>
+            <button
+              onClick={() => setBackupDismissed(true)}
+              className="text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-200 text-lg leading-none"
+              title="Dismiss"
+            >
+              &times;
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Dashboard</h1>
         <button

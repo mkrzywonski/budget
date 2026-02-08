@@ -206,4 +206,10 @@ export interface RecentBook {
   path: string
   name: string
   last_opened: string
+  last_backup: string | null
+}
+
+export interface BackupStatus {
+  last_backup: string | null
+  days_since_backup: number | null
 }

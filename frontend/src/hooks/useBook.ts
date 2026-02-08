@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api, BookStatus, RecentBook } from '../api/client'
+import { api, BookStatus, RecentBook, BackupStatus } from '../api/client'
 
 export function useBookStatus() {
   return useQuery({
@@ -48,6 +48,76 @@ export function useCloseBook() {
     mutationFn: () => api.post('/books/close'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bookStatus'] })
+    }
+  })
+}
+
+export function useRenameBook() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (name: string) =>
+      api.patch<BookStatus>('/books/rename', { name }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bookStatus'] })
+      queryClient.invalidateQueries({ queryKey: ['recentBooks'] })
+    }
+  })
+}
+
+export function useBackupStatus() {
+  return useQuery({
+    queryKey: ['backupStatus'],
+    queryFn: () => api.get<BackupStatus>('/books/backup-status')
+  })
+}
+
+export function useBackupBook() {
+  const queryClient = useQueryClient()
+
+  return {
+    download: async () => {
+      const response = await fetch('/api/books/backup')
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.detail || 'Backup failed')
+      }
+      const blob = await response.blob()
+      const disposition = response.headers.get('content-disposition')
+      const match = disposition?.match(/filename="?(.+?)"?$/)
+      const filename = match?.[1] || 'backup.db'
+
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+
+      queryClient.invalidateQueries({ queryKey: ['backupStatus'] })
+    }
+  }
+}
+
+export function useRestoreBook() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData()
+      formData.append('file', file)
+      const response = await fetch('/api/books/restore', {
+        method: 'POST',
+        body: formData,
+      })
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.detail || 'Restore failed')
+      }
+      return response.json() as Promise<BookStatus>
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries()
     }
   })
 }
