@@ -8,11 +8,26 @@ class MatchPattern(BaseModel):
     pattern: str
 
 
+class RecurringRule(BaseModel):
+    """Recurring transaction rule attached to a payee."""
+    account_id: int
+    frequency: str  # 'monthly' | 'every_n_months' | 'annual'
+    frequency_n: int = 1
+    day_of_month: int = 1
+    amount_method: str  # 'fixed' | 'copy_last' | 'average'
+    fixed_amount_cents: int | None = None
+    average_count: int = 3
+    start_date: str  # ISO date
+    end_date: str | None = None
+    category_id: int | None = None
+
+
 class PayeeCreate(BaseModel):
     """Fields for creating a payee."""
     name: str
     match_patterns: list[MatchPattern]
     default_category_id: int | None = None
+    recurring_rule: RecurringRule | None = None
 
 
 class PayeeUpdate(BaseModel):
@@ -20,6 +35,8 @@ class PayeeUpdate(BaseModel):
     name: str | None = None
     match_patterns: list[MatchPattern] | None = None
     default_category_id: int | None = None
+    recurring_rule: RecurringRule | None = None
+    remove_recurring_rule: bool = False
 
 
 class PayeeResponse(BaseModel):
@@ -28,6 +45,7 @@ class PayeeResponse(BaseModel):
     name: str
     match_patterns: list[MatchPattern]
     default_category_id: int | None = None
+    recurring_rule: RecurringRule | None = None
     created_at: datetime
     updated_at: datetime
 

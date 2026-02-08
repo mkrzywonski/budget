@@ -9,6 +9,7 @@ class AccountBase(BaseModel):
     institution: str | None = None
     notes: str | None = None
     display_order: int = 0
+    show_running_balance: bool = True
 
 
 class AccountCreate(AccountBase):
@@ -23,6 +24,7 @@ class AccountUpdate(BaseModel):
     institution: str | None = None
     notes: str | None = None
     display_order: int | None = None
+    show_running_balance: bool | None = None
 
 
 class AccountResponse(AccountBase):

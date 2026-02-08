@@ -7,6 +7,8 @@ from .categories import router as categories_router
 from .imports import router as imports_router
 from .payees import router as payees_router
 from .reports import router as reports_router
+from .forecasts import router as forecasts_router
+from .budgets import router as budgets_router
 
 api_router = APIRouter()
 
@@ -17,3 +19,5 @@ api_router.include_router(categories_router, prefix="/categories", tags=["catego
 api_router.include_router(imports_router, prefix="/import", tags=["import"])
 api_router.include_router(payees_router, prefix="/payees", tags=["payees"])
 api_router.include_router(reports_router, prefix="/reports", tags=["reports"])
+api_router.include_router(forecasts_router, prefix="/forecasts", tags=["forecasts"])
+api_router.include_router(budgets_router, prefix="/budgets", tags=["budgets"])

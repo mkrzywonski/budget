@@ -52,6 +52,7 @@ export interface Account {
   institution: string | null
   notes: string | null
   display_order: number
+  show_running_balance: boolean
   created_at: string
   updated_at: string
 }
@@ -102,32 +103,97 @@ export interface MatchPattern {
   pattern: string
 }
 
+export interface RecurringRule {
+  account_id: number
+  frequency: 'monthly' | 'every_n_months' | 'annual'
+  frequency_n: number
+  day_of_month: number
+  amount_method: 'fixed' | 'copy_last' | 'average'
+  fixed_amount_cents: number | null
+  average_count: number
+  start_date: string
+  end_date: string | null
+  category_id: number | null
+}
+
 export interface Payee {
   id: number
   name: string
   match_patterns: MatchPattern[]
   default_category_id: number | null
+  recurring_rule: RecurringRule | null
   created_at: string
   updated_at: string
+}
+
+export interface Forecast extends Transaction {
+  payee_id: number
+  period_date: string
 }
 
 export interface CategorySpendItem {
   category_id: number | null
   category_name: string
-  total_cents: number
+  income_cents: number
+  expense_cents: number
   transaction_count: number
+  children?: CategorySpendItem[] | null
 }
 
 export interface PayeeSpendItem {
   payee_name: string
-  total_cents: number
+  income_cents: number
+  expense_cents: number
   transaction_count: number
 }
 
 export interface MonthlySpendItem {
   year: number
   month: number
-  total_cents: number
+  income_cents: number
+  expense_cents: number
+}
+
+export interface BudgetItem {
+  id: number
+  category_id: number
+  amount_cents: number
+}
+
+export interface Budget {
+  id: number
+  name: string
+  is_active: boolean
+  account_ids: number[]
+  items: BudgetItem[]
+  created_at: string
+  updated_at: string
+}
+
+export interface BudgetVsActualItem {
+  category_id: number | null
+  category_name: string
+  parent_category_id: number | null
+  budget_cents: number
+  actual_cents: number
+  difference_cents: number
+  is_income: boolean
+}
+
+export interface BudgetVsActualMonth {
+  year: number
+  month: number
+  items: BudgetVsActualItem[]
+  total_budget_income: number
+  total_actual_income: number
+  total_budget_expense: number
+  total_actual_expense: number
+}
+
+export interface BudgetVsActualResponse {
+  budget_id: number
+  budget_name: string
+  months: BudgetVsActualMonth[]
 }
 
 export interface BookStatus {

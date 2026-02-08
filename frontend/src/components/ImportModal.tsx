@@ -45,6 +45,7 @@ export default function ImportModal({
   })
 
   const [acceptedDuplicates, setAcceptedDuplicates] = useState<Set<number>>(new Set())
+  const [excludedNew, setExcludedNew] = useState<Set<number>>(new Set())
   const [saveSettings, setSaveSettings] = useState(false)
   const [useSavedSettings, setUseSavedSettings] = useState(false)
 
@@ -211,6 +212,27 @@ export default function ImportModal({
     })
   }
 
+  const handleToggleNew = (rowIndex: number) => {
+    setExcludedNew(prev => {
+      const next = new Set(prev)
+      if (next.has(rowIndex)) {
+        next.delete(rowIndex)
+      } else {
+        next.add(rowIndex)
+      }
+      return next
+    })
+  }
+
+  const handleSelectAllNew = () => {
+    setExcludedNew(new Set())
+  }
+
+  const handleDeselectAllNew = () => {
+    if (!preview) return
+    setExcludedNew(new Set(preview.new_transactions.map(tx => tx.row_index)))
+  }
+
   const handleAcceptAllDuplicates = () => {
     if (!preview) return
     const indices = preview.duplicates.map(d => d.parsed.row_index)
@@ -224,9 +246,9 @@ export default function ImportModal({
   const handleCommit = async () => {
     if (!preview) return
 
-    // Combine new transactions with accepted duplicates
+    // Combine selected new transactions with accepted duplicates
     const allTransactions = [
-      ...preview.new_transactions,
+      ...preview.new_transactions.filter(tx => !excludedNew.has(tx.row_index)),
       ...preview.duplicates
         .filter(d => acceptedDuplicates.has(d.parsed.row_index))
         .map(d => d.parsed)
@@ -316,6 +338,10 @@ export default function ImportModal({
               onToggleDuplicate={handleToggleDuplicate}
               onAcceptAll={handleAcceptAllDuplicates}
               onRejectAll={handleRejectAllDuplicates}
+              excludedNew={excludedNew}
+              onToggleNew={handleToggleNew}
+              onSelectAllNew={handleSelectAllNew}
+              onDeselectAllNew={handleDeselectAllNew}
               saveSettings={saveSettings}
               onSaveSettingsChange={setSaveSettings}
               showSaveSettings={fileType === 'csv' && !useSavedSettings}
@@ -364,7 +390,7 @@ export default function ImportModal({
                 disabled={commitMutation.isPending}
                 className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
               >
-                {commitMutation.isPending ? 'Importing...' : `Import ${preview?.new_count} Transactions`}
+                {commitMutation.isPending ? 'Importing...' : `Import ${(preview?.new_count ?? 0) - excludedNew.size + acceptedDuplicates.size} Transactions`}
               </button>
             )}
             {step === 'complete' && (
@@ -681,6 +707,10 @@ function PreviewStep({
   onToggleDuplicate,
   onAcceptAll,
   onRejectAll,
+  excludedNew,
+  onToggleNew,
+  onSelectAllNew,
+  onDeselectAllNew,
   saveSettings,
   onSaveSettingsChange,
   showSaveSettings
@@ -690,6 +720,10 @@ function PreviewStep({
   onToggleDuplicate: (idx: number) => void
   onAcceptAll: () => void
   onRejectAll: () => void
+  excludedNew: Set<number>
+  onToggleNew: (idx: number) => void
+  onSelectAllNew: () => void
+  onDeselectAllNew: () => void
   saveSettings: boolean
   onSaveSettingsChange: (v: boolean) => void
   showSaveSettings: boolean
@@ -783,11 +817,28 @@ function PreviewStep({
 
       {/* New transactions preview */}
       <div>
-        <h3 className="font-medium mb-2">New Transactions</h3>
+        <div className="flex justify-between items-center mb-2">
+          <h3 className="font-medium">New Transactions</h3>
+          <div className="space-x-2">
+            <button
+              onClick={onSelectAllNew}
+              className="text-sm text-green-600 hover:underline"
+            >
+              Select All
+            </button>
+            <button
+              onClick={onDeselectAllNew}
+              className="text-sm text-red-600 hover:underline"
+            >
+              Deselect All
+            </button>
+          </div>
+        </div>
         <div className="border rounded max-h-64 overflow-auto">
           <table className="w-full text-sm">
             <thead className="bg-surface-secondary sticky top-0">
               <tr>
+                <th className="px-3 py-2 text-left w-12">Import?</th>
                 <th className="px-3 py-2 text-left">Date</th>
                 <th className="px-3 py-2 text-left">Payee</th>
                 <th className="px-3 py-2 text-left">Memo</th>
@@ -796,7 +847,21 @@ function PreviewStep({
             </thead>
             <tbody className="divide-y divide-border">
               {preview.new_transactions.slice(0, 50).map((tx) => (
-                <tr key={tx.row_index} className="hover:bg-hover">
+                <tr
+                  key={tx.row_index}
+                  className={clsx(
+                    'hover:bg-hover',
+                    excludedNew.has(tx.row_index) && 'opacity-50'
+                  )}
+                >
+                  <td className="px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={!excludedNew.has(tx.row_index)}
+                      onChange={() => onToggleNew(tx.row_index)}
+                      className="rounded"
+                    />
+                  </td>
                   <td className="px-3 py-2">
                     {format(new Date(tx.posted_date), 'MM/dd/yyyy')}
                   </td>

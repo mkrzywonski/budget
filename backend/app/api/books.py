@@ -1,5 +1,5 @@
 from pathlib import Path
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from ..config import load_recent_books, add_recent_book, RecentBook
@@ -79,6 +79,41 @@ def create_new_book(book: BookPath):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class BrowseEntry(BaseModel):
+    name: str
+    path: str
+    is_dir: bool
+
+
+@router.get("/browse", response_model=list[BrowseEntry])
+def browse_filesystem(dir: str = Query(default="~")):
+    """List directories and .db files in a directory."""
+    target = Path(dir).expanduser().resolve()
+    if not target.is_dir():
+        raise HTTPException(status_code=400, detail="Not a directory")
+
+    entries = []
+    try:
+        for item in sorted(target.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
+            if item.name.startswith('.'):
+                continue
+            if item.is_dir():
+                entries.append(BrowseEntry(name=item.name, path=str(item), is_dir=True))
+            elif item.suffix in ('.db', '.sqlite', '.sqlite3'):
+                entries.append(BrowseEntry(name=item.name, path=str(item), is_dir=False))
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    return entries
+
+
+@router.get("/browse/parent")
+def browse_parent(dir: str = Query(default="~")):
+    """Get the parent directory path."""
+    target = Path(dir).expanduser().resolve()
+    return {"path": str(target.parent)}
 
 
 @router.post("/close")

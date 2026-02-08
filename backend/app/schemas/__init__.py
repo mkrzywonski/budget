@@ -15,8 +15,19 @@ from .import_schemas import (
     ImportCommitResponse,
     ImportProfileResponse,
 )
-from .payee import PayeeCreate, PayeeUpdate, PayeeResponse, RematchResponse
+from .payee import PayeeCreate, PayeeUpdate, PayeeResponse, RematchResponse, RecurringRule
 from .report import CategorySpendItem, PayeeSpendItem, MonthlySpendItem
+from .budget import (
+    BudgetItemInput,
+    BudgetCreate,
+    BudgetUpdate,
+    AutoPopulateRequest,
+    BudgetItemResponse,
+    BudgetResponse,
+    BudgetVsActualItem,
+    BudgetVsActualMonth,
+    BudgetVsActualResponse,
+)
 
 __all__ = [
     "AccountCreate",
@@ -40,7 +51,17 @@ __all__ = [
     "PayeeUpdate",
     "PayeeResponse",
     "RematchResponse",
+    "RecurringRule",
     "CategorySpendItem",
     "PayeeSpendItem",
     "MonthlySpendItem",
+    "BudgetItemInput",
+    "BudgetCreate",
+    "BudgetUpdate",
+    "AutoPopulateRequest",
+    "BudgetItemResponse",
+    "BudgetResponse",
+    "BudgetVsActualItem",
+    "BudgetVsActualMonth",
+    "BudgetVsActualResponse",
 ]

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format, parseISO, startOfMonth } from 'date-fns'
 import { useAccounts } from '../hooks/useAccounts'
@@ -12,12 +12,36 @@ export default function Search() {
   const { data: accounts } = useAccounts()
   const { data: categories } = useCategories()
 
-  const [payeeSearch, setPayeeSearch] = useState('')
-  const [accountId, setAccountId] = useState<number | undefined>()
-  const [categoryId, setCategoryId] = useState<number | undefined>()
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
-  const [includeTransfers, setIncludeTransfers] = useState(true)
+  const [payeeSearch, setPayeeSearch] = useState(() => sessionStorage.getItem('search-payee') || '')
+  const [accountId, setAccountId] = useState<number | undefined>(() => {
+    const v = sessionStorage.getItem('search-account')
+    return v ? Number(v) : undefined
+  })
+  const [categoryId, setCategoryId] = useState<number | undefined>(() => {
+    const v = sessionStorage.getItem('search-category')
+    return v ? Number(v) : undefined
+  })
+  const [startDate, setStartDate] = useState(() => sessionStorage.getItem('search-start') || '')
+  const [endDate, setEndDate] = useState(() => sessionStorage.getItem('search-end') || '')
+  const [includeTransfers, setIncludeTransfers] = useState(() => sessionStorage.getItem('search-transfers') !== 'false')
+
+  useEffect(() => {
+    payeeSearch ? sessionStorage.setItem('search-payee', payeeSearch) : sessionStorage.removeItem('search-payee')
+    accountId ? sessionStorage.setItem('search-account', String(accountId)) : sessionStorage.removeItem('search-account')
+    categoryId ? sessionStorage.setItem('search-category', String(categoryId)) : sessionStorage.removeItem('search-category')
+    startDate ? sessionStorage.setItem('search-start', startDate) : sessionStorage.removeItem('search-start')
+    endDate ? sessionStorage.setItem('search-end', endDate) : sessionStorage.removeItem('search-end')
+    sessionStorage.setItem('search-transfers', String(includeTransfers))
+  }, [payeeSearch, accountId, categoryId, startDate, endDate, includeTransfers])
+
+  const clearFilters = () => {
+    setPayeeSearch('')
+    setAccountId(undefined)
+    setCategoryId(undefined)
+    setStartDate('')
+    setEndDate('')
+    setIncludeTransfers(true)
+  }
 
   const filters: SearchFilters = useMemo(
     () => ({
@@ -127,7 +151,7 @@ export default function Search() {
               className="w-full px-3 py-1.5 text-sm border border-input-border rounded bg-input"
             />
           </div>
-          <div className="flex items-end pb-1">
+          <div className="flex items-end pb-1 gap-3">
             <label className="flex items-center gap-2 text-sm text-content-secondary">
               <input
                 type="checkbox"
@@ -136,6 +160,14 @@ export default function Search() {
               />
               Include transfers
             </label>
+            {hasFilters && (
+              <button
+                onClick={clearFilters}
+                className="px-3 py-1 text-xs border border-border rounded hover:bg-hover text-content-secondary"
+              >
+                Clear
+              </button>
+            )}
           </div>
         </div>
       </div>

@@ -1,4 +1,4 @@
-from sqlalchemy import String, Integer
+from sqlalchemy import String, Integer, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, TimestampMixin
@@ -20,6 +20,9 @@ class Account(Base, TimestampMixin):
 
     # Display order for UI
     display_order: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Whether to show running balance column in ledger
+    show_running_balance: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
 
     # Relationships
     transactions: Mapped[list["Transaction"]] = relationship(

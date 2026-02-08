@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { format, startOfMonth, addMonths, subMonths, parseISO } from 'date-fns'
+import { format, startOfMonth, endOfMonth, addMonths, subMonths, parseISO } from 'date-fns'
 import { useAccount, useAccounts } from '../hooks/useAccounts'
 import {
   useTransactions,
@@ -15,8 +15,9 @@ import {
 import { useCreatePayee } from '../hooks/usePayees'
 import { usePayees } from '../hooks/usePayees'
 import { useCategories } from '../hooks/useCategories'
-import { Transaction, Account, Category, TransferMatch } from '../api/client'
+import { Transaction, Account, Category, TransferMatch, Forecast, Payee } from '../api/client'
 import { formatCurrency, parseCurrency } from '../utils/format'
+import { useForecasts, useDismissForecast } from '../hooks/useForecasts'
 import ImportModal from '../components/ImportModal'
 import clsx from 'clsx'
 
@@ -79,7 +80,7 @@ export default function Ledger() {
   const { data: balanceBeforeData } = useBalanceBefore(id, monthStart)
   const openingBalance = balanceBeforeData?.balance_cents ?? 0
 
-  const showBalance = sortField === 'posted_date' && sortDir === 'asc'
+  const showBalance = (account?.show_running_balance ?? true) && sortField === 'posted_date' && sortDir === 'asc'
 
   const { data: accounts } = useAccounts()
   const createMutation = useCreateTransaction()
@@ -90,6 +91,12 @@ export default function Ledger() {
   const createPayeeMutation = useCreatePayee()
   const { data: payees } = usePayees()
   const { data: categories } = useCategories()
+
+  // Forecasts
+  const monthEnd = format(endOfMonth(currentDate), 'yyyy-MM-dd')
+  const { data: forecasts } = useForecasts(id, monthStart, monthEnd)
+  const dismissForecastMutation = useDismissForecast()
+  const [confirmingForecast, setConfirmingForecast] = useState<Forecast | null>(null)
 
   const categoryMap = useMemo(() => {
     const map = new Map<number, string>()
@@ -123,15 +130,31 @@ export default function Ledger() {
     return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b))
   }, [payees])
 
-  // Sort transactions
+  // Sort transactions + merge forecasts (excluding fulfilled ones)
   const sorted = useMemo(() => {
     if (!transactions) return []
-    const list = [...transactions]
+    // Build set of payee names that already exist in actual transactions
+    const existingPayees = new Set<string>()
+    for (const tx of transactions) {
+      if (tx.display_name) existingPayees.add(tx.display_name)
+      if (tx.payee_raw) existingPayees.add(tx.payee_raw)
+    }
+    // Only include forecasts whose display_name has no matching actual transaction
+    const visibleForecasts = (forecasts || []).filter(
+      (f) => !f.display_name || !existingPayees.has(f.display_name)
+    )
+    const list: Transaction[] = [...transactions, ...visibleForecasts]
     list.sort((a, b) => {
       let cmp = 0
       switch (sortField) {
         case 'posted_date':
           cmp = a.posted_date.localeCompare(b.posted_date)
+          // Forecasts sort after actuals on same date
+          if (cmp === 0) {
+            const aF = a.transaction_type === 'forecast' ? 1 : 0
+            const bF = b.transaction_type === 'forecast' ? 1 : 0
+            cmp = aF - bF
+          }
           break
         case 'type':
           cmp = deriveTxType(a).localeCompare(deriveTxType(b))
@@ -154,22 +177,19 @@ export default function Ledger() {
       return sortDir === 'asc' ? cmp : -cmp
     })
     return list
-  }, [transactions, sortField, sortDir])
+  }, [transactions, forecasts, sortField, sortDir])
 
-  // Calculate running balance starting from the opening balance
+  // Calculate running balance from sorted list (actuals + forecasts)
   const balanceMap = useMemo(() => {
-    if (!transactions) return new Map<number, number>()
-    const byDate = [...transactions].sort((a, b) =>
-      a.posted_date.localeCompare(b.posted_date) || a.created_at.localeCompare(b.created_at)
-    )
+    if (!sorted.length) return new Map<number, number>()
     const map = new Map<number, number>()
     let balance = openingBalance
-    for (const tx of byDate) {
+    for (const tx of sorted) {
       balance += tx.amount_cents
       map.set(tx.id, balance)
     }
     return map
-  }, [transactions, openingBalance])
+  }, [sorted, openingBalance])
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -178,6 +198,11 @@ export default function Ledger() {
       setSortField(field)
       setSortDir('asc')
     }
+  }
+
+  const findMatchingPayee = (tx: Transaction): Payee | undefined => {
+    if (!tx.display_name || !payees) return undefined
+    return payees.find((p) => p.name === tx.display_name)
   }
 
   const handleAddPayee = async (tx: Transaction) => {
@@ -193,6 +218,10 @@ export default function Ledger() {
       console.error('Failed to create payee', error)
       window.alert('Failed to create payee. Check the console for details.')
     }
+  }
+
+  const handleEditPayee = (payeeId: number) => {
+    navigate('/payees', { state: { editPayeeId: payeeId } })
   }
 
   const handleCreate = async (data: {
@@ -250,6 +279,18 @@ export default function Ledger() {
       payee,
       category_id: categoryId
     })
+  }
+
+  const handleDismissForecast = async (forecast: Forecast) => {
+    await dismissForecastMutation.mutateAsync({
+      payee_id: forecast.payee_id,
+      account_id: forecast.account_id,
+      period_date: forecast.period_date,
+    })
+  }
+
+  const handleConfirmForecast = (forecast: Forecast) => {
+    setConfirmingForecast(forecast)
   }
 
   const prevMonth = () => setCurrentDate((d) => subMonths(d, 1))
@@ -390,12 +431,40 @@ export default function Ledger() {
                     categoryMap={categoryMap}
                     runningBalance={balanceMap.get(tx.id) ?? 0}
                     showBalance={showBalance}
+                    matchingPayee={findMatchingPayee(tx)}
                     onEdit={() => setEditingId(tx.id)}
                     onDelete={() => handleDelete(tx.id)}
                     onAddPayee={() => handleAddPayee(tx)}
+                    onEditPayee={(payeeId) => handleEditPayee(payeeId)}
                     onCategorize={(catId) => handleCategorize(tx, catId)}
+                    onConfirmForecast={() => handleConfirmForecast(tx as Forecast)}
+                    onDismissForecast={() => handleDismissForecast(tx as Forecast)}
                   />
                 )
+              )}
+              {/* Confirm forecast entry row */}
+              {confirmingForecast && (
+                <EntryRow
+                  key="confirm-forecast"
+                  defaultDate={confirmingForecast.posted_date}
+                  defaultType={confirmingForecast.amount_cents < 0 ? 'debit' : 'credit'}
+                  categories={categories || []}
+                  accounts={accounts || []}
+                  currentAccountId={id}
+                  showBalance={showBalance}
+                  onSubmit={async (data) => {
+                    await handleCreate(data)
+                    setConfirmingForecast(null)
+                  }}
+                  isPending={createMutation.isPending}
+                  payeeSuggestions={payeeSuggestions}
+                  prefill={{
+                    payee: confirmingForecast.display_name || '',
+                    amount: (Math.abs(confirmingForecast.amount_cents) / 100).toFixed(2),
+                    categoryId: confirmingForecast.category_id,
+                  }}
+                  onCancel={() => setConfirmingForecast(null)}
+                />
               )}
               {/* Entry row */}
               <EntryRow
@@ -421,7 +490,9 @@ export default function Ledger() {
             <span className="text-content-secondary">Month Total: </span>
             <span className="font-medium">
               {formatCurrency(
-                (transactions || []).reduce(
+                (transactions || []).filter(
+                  (tx) => tx.transaction_type !== 'forecast'
+                ).reduce(
                   (sum, tx) => sum + tx.amount_cents,
                   0
                 )
@@ -442,10 +513,14 @@ interface TransactionRowProps {
   categoryMap: Map<number, string>
   runningBalance: number
   showBalance: boolean
+  matchingPayee?: Payee
   onEdit: () => void
   onDelete: () => void
   onAddPayee: () => void
+  onEditPayee: (payeeId: number) => void
   onCategorize: (categoryId: number) => void
+  onConfirmForecast: () => void
+  onDismissForecast: () => void
 }
 
 function TransactionRow({
@@ -454,10 +529,14 @@ function TransactionRow({
   categoryMap,
   runningBalance,
   showBalance,
+  matchingPayee,
   onEdit,
   onDelete,
   onAddPayee,
-  onCategorize
+  onEditPayee,
+  onCategorize,
+  onConfirmForecast,
+  onDismissForecast,
 }: TransactionRowProps) {
   const isForecast = tx.transaction_type === 'forecast'
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
@@ -498,16 +577,29 @@ function TransactionRow({
             className="fixed z-50 bg-white dark:bg-gray-800 border border-border rounded shadow-lg py-1 min-w-[160px]"
             style={{ left: contextMenu.x, top: contextMenu.y }}
           >
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                setContextMenu(null)
-                onAddPayee()
-              }}
-              className="w-full text-left px-3 py-1.5 text-sm hover:bg-hover"
-            >
-              Create payee rule
-            </button>
+            {matchingPayee ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setContextMenu(null)
+                  onEditPayee(matchingPayee.id)
+                }}
+                className="w-full text-left px-3 py-1.5 text-sm hover:bg-hover"
+              >
+                Edit payee rule
+              </button>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setContextMenu(null)
+                  onAddPayee()
+                }}
+                className="w-full text-left px-3 py-1.5 text-sm hover:bg-hover"
+              >
+                Create payee rule
+              </button>
+            )}
           </div>
         )}
       </td>
@@ -553,65 +645,69 @@ function TransactionRow({
         </td>
       )}
       <td className="px-4 py-1 text-right">
-        <div className="invisible group-hover:visible flex justify-end gap-1">
-          <button
-            onClick={onEdit}
-            className="p-1 text-content-tertiary hover:text-blue-600 rounded"
-            title="Edit"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+        {isForecast ? (
+          <div className="invisible group-hover:visible flex justify-end gap-1">
+            <button
+              onClick={onConfirmForecast}
+              className="p-1 text-green-600 hover:text-green-700 rounded"
+              title="Confirm forecast"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-              />
-            </svg>
-          </button>
-          <button
-            onClick={onDelete}
-            className="p-1 text-content-tertiary hover:text-red-600 rounded"
-            title="Delete"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </button>
+            <button
+              onClick={onDismissForecast}
+              className="p-1 text-content-tertiary hover:text-red-600 rounded"
+              title="Dismiss forecast"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-              />
-            </svg>
-          </button>
-          <button
-            className="p-1 text-content-tertiary hover:text-purple-600 rounded"
-            title="Recurrence"
-            disabled
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        ) : (
+          <div className="invisible group-hover:visible flex justify-end gap-1">
+            <button
+              onClick={onEdit}
+              className="p-1 text-content-tertiary hover:text-blue-600 rounded"
+              title="Edit"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-              />
-            </svg>
-          </button>
-        </div>
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                />
+              </svg>
+            </button>
+            <button
+              onClick={onDelete}
+              className="p-1 text-content-tertiary hover:text-red-600 rounded"
+              title="Delete"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
+              </svg>
+            </button>
+          </div>
+        )}
       </td>
     </tr>
   )
@@ -902,6 +998,8 @@ interface EntryRowProps {
   }) => Promise<void>
   isPending: boolean
   payeeSuggestions: string[]
+  prefill?: { payee: string; amount: string; categoryId: number | null }
+  onCancel?: () => void
 }
 
 function EntryRow({
@@ -913,14 +1011,16 @@ function EntryRow({
   showBalance,
   onSubmit,
   isPending,
-  payeeSuggestions
+  payeeSuggestions,
+  prefill,
+  onCancel,
 }: EntryRowProps) {
   const [date, setDate] = useState(defaultDate)
   const [type, setType] = useState<TxType>(defaultType)
-  const [payee, setPayee] = useState('')
+  const [payee, setPayee] = useState(prefill?.payee || '')
   const [memo, setMemo] = useState('')
-  const [amount, setAmount] = useState('')
-  const [categoryId, setCategoryId] = useState<number | null>(null)
+  const [amount, setAmount] = useState(prefill?.amount || '')
+  const [categoryId, setCategoryId] = useState<number | null>(prefill?.categoryId ?? null)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
   const dateRef = useRef<HTMLInputElement>(null)
@@ -1059,7 +1159,10 @@ function EntryRow({
 
   return (
     <>
-    <tr className="bg-surface-secondary/50 border-t-2 border-border">
+    <tr className={clsx(
+      'border-t-2 border-border',
+      prefill ? 'bg-amber-50 dark:bg-amber-950' : 'bg-surface-secondary/50'
+    )}>
       <td className="px-4 py-1.5">
         <input
           ref={dateRef}
@@ -1181,13 +1284,23 @@ function EntryRow({
       </td>
       {showBalance && <td className="px-4 py-1.5"></td>}
       <td className="px-4 py-1.5 text-right">
-        <button
-          onClick={handleSubmit}
-          disabled={isEmpty || isPending}
-          className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-30 disabled:cursor-not-allowed"
-        >
-          Add
-        </button>
+        <div className="flex justify-end gap-1">
+          <button
+            onClick={handleSubmit}
+            disabled={isEmpty || isPending}
+            className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            {prefill ? 'Confirm' : 'Add'}
+          </button>
+          {onCancel && (
+            <button
+              onClick={onCancel}
+              className="px-2 py-1 text-xs border border-border-strong rounded hover:bg-hover"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
       </td>
     </tr>
     {transferMatch && !deleteMatchId && (

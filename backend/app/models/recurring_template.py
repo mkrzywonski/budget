@@ -37,6 +37,11 @@ class RecurringTemplate(Base, TimestampMixin):
         Integer, ForeignKey("accounts.id"), nullable=False
     )
 
+    # Link to payee (managed from payee rules UI)
+    payee_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("payees.id"), nullable=True
+    )
+
     # Description
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     payee: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -72,6 +77,7 @@ class RecurringTemplate(Base, TimestampMixin):
     account: Mapped["Account"] = relationship(
         "Account", back_populates="recurring_templates"
     )
+    payee_rel: Mapped["Payee | None"] = relationship("Payee")
     category: Mapped["Category | None"] = relationship("Category")
     transactions: Mapped[list["Transaction"]] = relationship(
         "Transaction", back_populates="recurring_template"

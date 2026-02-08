@@ -1,3 +1,4 @@
+from datetime import date
 from pathlib import Path
 from sqlalchemy import create_engine, event, text, inspect
 from sqlalchemy.orm import sessionmaker, Session
@@ -39,6 +40,9 @@ def open_book(db_path: Path) -> None:
     # Migrate existing tables: add missing columns
     _migrate_schema(_current_engine)
 
+    # Clean up stale forecast dismissals
+    _cleanup_old_dismissals(_current_engine)
+
 
 def _migrate_schema(engine: Engine) -> None:
     """Add any missing columns to existing tables."""
@@ -49,6 +53,8 @@ def _migrate_schema(engine: Engine) -> None:
     migrations = [
         ("transactions", "display_name", "VARCHAR(255)"),
         ("transactions", "external_id", "VARCHAR(255)"),
+        ("accounts", "show_running_balance", "BOOLEAN DEFAULT 1"),
+        ("recurring_templates", "payee_id", "INTEGER REFERENCES payees(id)"),
     ]
 
     with engine.connect() as conn:
@@ -61,6 +67,19 @@ def _migrate_schema(engine: Engine) -> None:
                     f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"
                 ))
                 conn.commit()
+
+
+def _cleanup_old_dismissals(engine: Engine) -> None:
+    """Delete forecast dismissals for months before the current month."""
+    inspector = inspect(engine)
+    if not inspector.has_table("forecast_dismissals"):
+        return
+    current_month = date.today().replace(day=1).isoformat()
+    with engine.connect() as conn:
+        conn.execute(text(
+            f"DELETE FROM forecast_dismissals WHERE period_date < '{current_month}'"
+        ))
+        conn.commit()
 
 
 def close_book() -> None:

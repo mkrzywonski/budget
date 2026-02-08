@@ -16,6 +16,7 @@ def spending_by_category(
     account_id: list[int] | None = Query(None),
     category_id: list[int] | None = Query(None),
     include_transfers: bool = Query(False),
+    group_by_parent: bool = Query(True),
     db: Session = Depends(get_db),
 ):
     service = ReportService(db)
@@ -25,15 +26,35 @@ def spending_by_category(
         account_ids=account_id,
         category_ids=category_id,
         include_transfers=include_transfers,
+        group_by_parent=group_by_parent,
     )
 
     return [
-        CategorySpendItem(
-            category_id=row.category_id,
-            category_name=row.category_name,
-            total_cents=int(row.total_cents or 0),
-            transaction_count=int(row.transaction_count or 0),
-        )
+        CategorySpendItem(**row)
+        for row in rows
+    ]
+
+
+@router.get("/spending-by-category/{parent_id}/children", response_model=list[CategorySpendItem])
+def spending_by_category_children(
+    parent_id: int,
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
+    account_id: list[int] | None = Query(None),
+    include_transfers: bool = Query(False),
+    db: Session = Depends(get_db),
+):
+    service = ReportService(db)
+    rows = service.spending_by_category_children(
+        parent_category_id=parent_id,
+        start_date=start_date,
+        end_date=end_date,
+        account_ids=account_id,
+        include_transfers=include_transfers,
+    )
+
+    return [
+        CategorySpendItem(**row)
         for row in rows
     ]
 
@@ -59,7 +80,8 @@ def spending_by_payee(
     return [
         PayeeSpendItem(
             payee_name=row.payee_name,
-            total_cents=int(row.total_cents or 0),
+            income_cents=int(row.income_cents or 0),
+            expense_cents=int(row.expense_cents or 0),
             transaction_count=int(row.transaction_count or 0),
         )
         for row in rows
@@ -88,7 +110,8 @@ def spending_trends(
         MonthlySpendItem(
             year=int(row.year),
             month=int(row.month),
-            total_cents=int(row.total_cents or 0),
+            income_cents=int(row.income_cents or 0),
+            expense_cents=int(row.expense_cents or 0),
         )
         for row in rows
     ]

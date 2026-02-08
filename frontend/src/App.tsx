@@ -7,6 +7,7 @@ import Payees from './pages/Payees'
 import Categories from './pages/Categories'
 import Reports from './pages/Reports'
 import Search from './pages/Search'
+import BudgetPage from './pages/BudgetPage'
 import Layout from './components/Layout'
 
 function App() {
@@ -30,6 +31,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/reports" element={<Reports />} />
+        <Route path="/budget" element={<BudgetPage />} />
         <Route path="/search" element={<Search />} />
         <Route path="/accounts/:accountId" element={<Ledger />} />
         <Route path="/payees" element={<Payees />} />

@@ -20,6 +20,7 @@ export default function Dashboard() {
   const [editName, setEditName] = useState('')
   const [editType, setEditType] = useState('')
   const [editInstitution, setEditInstitution] = useState('')
+  const [editShowBalance, setEditShowBalance] = useState(true)
 
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -41,6 +42,7 @@ export default function Dashboard() {
       setEditName(editingAccount.name)
       setEditType(editingAccount.account_type)
       setEditInstitution(editingAccount.institution || '')
+      setEditShowBalance(editingAccount.show_running_balance)
     }
   }, [editingAccount])
 
@@ -70,6 +72,7 @@ export default function Dashboard() {
       name: editName,
       account_type: editType,
       institution: editInstitution || undefined,
+      show_running_balance: editShowBalance,
     })
     setEditingAccount(null)
   }
@@ -279,6 +282,15 @@ export default function Dashboard() {
                   className="w-full px-3 py-2 border border-input-border rounded bg-input focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={editShowBalance}
+                  onChange={(e) => setEditShowBalance(e.target.checked)}
+                  className="rounded"
+                />
+                <span className="text-sm text-content">Show running balance in ledger</span>
+              </label>
               <div className="flex gap-2 pt-2">
                 <button
                   type="submit"

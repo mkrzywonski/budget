@@ -94,13 +94,26 @@ def get_balance_before(
     before_date: date = Query(...),
     db: Session = Depends(get_db)
 ):
-    """Sum of all transactions in an account before the given date."""
+    """Sum of all transactions in an account before the given date, including forecasts."""
     from sqlalchemy import func
-    result = db.query(func.coalesce(func.sum(Transaction.amount_cents), 0)).filter(
+    from ..services.forecast_service import generate_forecasts
+
+    actual_balance = db.query(func.coalesce(func.sum(Transaction.amount_cents), 0)).filter(
         Transaction.account_id == account_id,
         Transaction.posted_date < before_date
     ).scalar()
-    return {"balance_cents": result}
+
+    # Include forecast amounts from the current month through before_date.
+    # This ensures that when viewing a future month, expected recurring
+    # transactions from intervening months are reflected in the opening balance.
+    current_month_start = date.today().replace(day=1)
+    forecast_total = 0
+    if before_date > current_month_start:
+        forecast_end = before_date - timedelta(days=1)
+        forecasts = generate_forecasts(db, account_id, current_month_start, forecast_end)
+        forecast_total = sum(f["amount_cents"] for f in forecasts)
+
+    return {"balance_cents": actual_balance + forecast_total}
 
 
 @router.get("/find-transfer-match", response_model=list[TransferMatchResponse])
