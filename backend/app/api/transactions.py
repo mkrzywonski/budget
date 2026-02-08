@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, extract
+from sqlalchemy import and_, extract, func, or_
 
 from ..database import get_db
 from ..models import Transaction, Account, TransactionType
@@ -22,13 +22,21 @@ def list_transactions(
     account_id: int | None = None,
     year: int | None = None,
     month: int | None = None,
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
+    category_id: list[int] | None = Query(None),
+    uncategorized: bool = Query(False),
+    payee_name: str | None = Query(None),
+    amount_sign: str | None = Query(None),
+    payee_search: str | None = Query(None),
+    include_transfers: bool | None = Query(None),
     db: Session = Depends(get_db)
 ):
     """
     Get transactions with optional filters.
 
     If year/month provided, returns transactions for that month.
-    Otherwise returns all transactions for the account.
+    start_date/end_date, category_id, and payee_name support drill-down from reports.
     """
     query = db.query(Transaction)
 
@@ -42,6 +50,37 @@ def list_transactions(
                 extract("month", Transaction.posted_date) == month
             )
         )
+
+    if start_date:
+        query = query.filter(Transaction.posted_date >= start_date)
+    if end_date:
+        query = query.filter(Transaction.posted_date <= end_date)
+    if uncategorized:
+        query = query.filter(Transaction.category_id.is_(None))
+    elif category_id:
+        query = query.filter(Transaction.category_id.in_(category_id))
+    if payee_name:
+        payee_label = func.coalesce(
+            Transaction.display_name,
+            Transaction.payee_normalized,
+            Transaction.payee_raw,
+        )
+        query = query.filter(payee_label == payee_name)
+    if payee_search:
+        pattern = f"%{payee_search}%"
+        query = query.filter(
+            or_(
+                Transaction.display_name.ilike(pattern),
+                Transaction.payee_normalized.ilike(pattern),
+                Transaction.payee_raw.ilike(pattern),
+            )
+        )
+    if amount_sign == "positive":
+        query = query.filter(Transaction.amount_cents > 0)
+    elif amount_sign == "negative":
+        query = query.filter(Transaction.amount_cents < 0)
+    if include_transfers is not None and not include_transfers:
+        query = query.filter(Transaction.transaction_type != TransactionType.TRANSFER)
 
     return query.order_by(
         Transaction.posted_date,
@@ -322,6 +361,9 @@ def update_transaction(
 
     if "payee_raw" in update_data and "display_name" not in update_data:
         apply_payee_match(db, db_transaction)
+        # If user explicitly set category_id, don't let payee match override it
+        if "category_id" in update_data:
+            db_transaction.category_id = update_data["category_id"]
 
     db.flush()
     db.refresh(db_transaction)

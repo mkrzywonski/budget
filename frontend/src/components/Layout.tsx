@@ -50,6 +50,16 @@ export default function Layout({ bookName, children }: LayoutProps) {
           >
             Reports
           </Link>
+          <Link
+            to="/search"
+            className={`block px-3 py-2 rounded mb-2 ${
+              location.pathname === '/search'
+                ? 'bg-gray-700 dark:bg-gray-900 text-white'
+                : 'text-gray-300 hover:bg-gray-700 dark:hover:bg-gray-900'
+            }`}
+          >
+            Search
+          </Link>
 
           <div className="mt-4">
             <h2 className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
