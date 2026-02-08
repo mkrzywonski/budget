@@ -335,4 +335,4 @@ docker-compose.yml  # Single-service deployment
 
 ## License
 
-This is a personal project. No license has been chosen yet.
+This project is licensed under the [GNU General Public License v3.0](LICENSE).
