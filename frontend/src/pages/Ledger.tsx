@@ -487,9 +487,9 @@ export default function Ledger() {
       <div className="bg-surface-secondary border-t px-6 py-3">
         <div className="flex justify-end gap-8 text-sm">
           {(() => {
-            const actuals = (transactions || []).filter(tx => tx.transaction_type !== 'forecast')
-            const income = actuals.filter(tx => tx.amount_cents > 0).reduce((sum, tx) => sum + tx.amount_cents, 0)
-            const expenses = actuals.filter(tx => tx.amount_cents < 0).reduce((sum, tx) => sum + tx.amount_cents, 0)
+            const all = sorted || []
+            const income = all.filter(tx => tx.amount_cents > 0).reduce((sum, tx) => sum + tx.amount_cents, 0)
+            const expenses = all.filter(tx => tx.amount_cents < 0).reduce((sum, tx) => sum + tx.amount_cents, 0)
             return (
               <>
                 <div>
