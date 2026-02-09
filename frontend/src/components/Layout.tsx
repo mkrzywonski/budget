@@ -110,14 +110,14 @@ export default function Layout({ bookName, children }: LayoutProps) {
 
         <nav className="flex-1 p-4">
           <Link
-            to="/"
+            to="/search"
             className={`block px-3 py-2 rounded mb-2 ${
-              location.pathname === '/'
+              location.pathname === '/search'
                 ? 'bg-gray-700 dark:bg-gray-900 text-white'
                 : 'text-gray-300 hover:bg-gray-700 dark:hover:bg-gray-900'
             }`}
           >
-            Dashboard
+            Search
           </Link>
           <Link
             to="/reports"
@@ -138,16 +138,6 @@ export default function Layout({ bookName, children }: LayoutProps) {
             }`}
           >
             Budget
-          </Link>
-          <Link
-            to="/search"
-            className={`block px-3 py-2 rounded mb-2 ${
-              location.pathname === '/search'
-                ? 'bg-gray-700 dark:bg-gray-900 text-white'
-                : 'text-gray-300 hover:bg-gray-700 dark:hover:bg-gray-900'
-            }`}
-          >
-            Search
           </Link>
 
           <div className="mt-4">
@@ -176,6 +166,16 @@ export default function Layout({ bookName, children }: LayoutProps) {
               Manage
             </h2>
             <div className="mt-2 space-y-1">
+              <Link
+                to="/"
+                className={`block px-3 py-2 rounded ${
+                  location.pathname === '/'
+                    ? 'bg-gray-700 dark:bg-gray-900 text-white'
+                    : 'text-gray-300 hover:bg-gray-700 dark:hover:bg-gray-900'
+                }`}
+              >
+                Accounts
+              </Link>
               <Link
                 to="/payees"
                 className={`block px-3 py-2 rounded ${

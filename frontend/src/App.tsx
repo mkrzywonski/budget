@@ -1,7 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useBookStatus } from './hooks/useBook'
 import BookPicker from './pages/BookPicker'
-import Dashboard from './pages/Dashboard'
+import Accounts from './pages/Accounts'
 import Ledger from './pages/Ledger'
 import Payees from './pages/Payees'
 import Categories from './pages/Categories'
@@ -29,7 +29,7 @@ function App() {
   return (
     <Layout bookName={bookStatus.name || 'Budget'}>
       <Routes>
-        <Route path="/" element={<Dashboard />} />
+        <Route path="/" element={<Accounts />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/budget" element={<BudgetPage />} />
         <Route path="/search" element={<Search />} />

@@ -4,7 +4,7 @@ import { useBackupStatus, useBackupBook } from '../hooks/useBook'
 import { Account } from '../api/client'
 import { Link } from 'react-router-dom'
 
-export default function Dashboard() {
+export default function Accounts() {
   const { data: accounts, isLoading } = useAccounts()
   const createAccount = useCreateAccount()
   const updateAccount = useUpdateAccount()
@@ -140,7 +140,7 @@ export default function Dashboard() {
       )}
 
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <h1 className="text-2xl font-bold">Accounts</h1>
         <button
           onClick={() => setShowCreate(true)}
           className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
