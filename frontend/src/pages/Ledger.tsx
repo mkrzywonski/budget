@@ -486,19 +486,27 @@ export default function Ledger() {
       {/* Footer with totals */}
       <div className="bg-surface-secondary border-t px-6 py-3">
         <div className="flex justify-end gap-8 text-sm">
-          <div>
-            <span className="text-content-secondary">Month Total: </span>
-            <span className="font-medium">
-              {formatCurrency(
-                (transactions || []).filter(
-                  (tx) => tx.transaction_type !== 'forecast'
-                ).reduce(
-                  (sum, tx) => sum + tx.amount_cents,
-                  0
-                )
-              )}
-            </span>
-          </div>
+          {(() => {
+            const actuals = (transactions || []).filter(tx => tx.transaction_type !== 'forecast')
+            const income = actuals.filter(tx => tx.amount_cents > 0).reduce((sum, tx) => sum + tx.amount_cents, 0)
+            const expenses = actuals.filter(tx => tx.amount_cents < 0).reduce((sum, tx) => sum + tx.amount_cents, 0)
+            return (
+              <>
+                <div>
+                  <span className="text-content-secondary">Credits: </span>
+                  <span className="font-medium text-green-600 dark:text-green-400">{formatCurrency(income)}</span>
+                </div>
+                <div>
+                  <span className="text-content-secondary">Debits: </span>
+                  <span className="font-medium text-red-600 dark:text-red-400">{formatCurrency(expenses)}</span>
+                </div>
+                <div>
+                  <span className="text-content-secondary">Net: </span>
+                  <span className="font-medium">{formatCurrency(income + expenses)}</span>
+                </div>
+              </>
+            )
+          })()}
         </div>
       </div>
     </div>
