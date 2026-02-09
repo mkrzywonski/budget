@@ -4,21 +4,12 @@ uvicorn[standard]>=0.27.0
 
 # Database
 sqlalchemy>=2.0.0
-alembic>=1.13.0
 
 # Validation
 pydantic>=2.0.0
 
 # Import parsing
 ofxparse>=0.21  # QFX/OFX parsing
-python-dateutil>=2.8.0
 
 # File uploads
 python-multipart>=0.0.7
-
-# Utilities
-qrcode>=7.4.0
-
-# Development
-pytest>=8.0.0
-httpx>=0.26.0  # For testing FastAPI
