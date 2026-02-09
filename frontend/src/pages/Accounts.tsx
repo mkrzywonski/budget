@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAccounts, useCreateAccount, useUpdateAccount, useDeleteAccount } from '../hooks/useAccounts'
-import { useBackupStatus, useBackupBook } from '../hooks/useBook'
+import { useBackupStatus, useBackupBook, useBookStatus, useSetPassword, useRemovePassword } from '../hooks/useBook'
 import { Account } from '../api/client'
 import { Link } from 'react-router-dom'
 
@@ -11,9 +11,19 @@ export default function Accounts() {
   const deleteAccount = useDeleteAccount()
   const { data: backupStatus } = useBackupStatus()
   const backup = useBackupBook()
+  const { data: bookStatus } = useBookStatus()
+  const setPasswordMut = useSetPassword()
+  const removePasswordMut = useRemovePassword()
 
   const [showCreate, setShowCreate] = useState(false)
   const [backupDismissed, setBackupDismissed] = useState(false)
+
+  // Password management state
+  const [showPasswordModal, setShowPasswordModal] = useState<'set' | 'remove' | null>(null)
+  const [pwCurrent, setPwCurrent] = useState('')
+  const [pwNew, setPwNew] = useState('')
+  const [pwConfirm, setPwConfirm] = useState('')
+  const [pwError, setPwError] = useState('')
   const [backupDownloading, setBackupDownloading] = useState(false)
   const [name, setName] = useState('')
   const [accountType, setAccountType] = useState('checking')
@@ -108,6 +118,47 @@ export default function Accounts() {
       await backup.download()
     } finally {
       setBackupDownloading(false)
+    }
+  }
+
+  const closePasswordModal = () => {
+    setShowPasswordModal(null)
+    setPwCurrent('')
+    setPwNew('')
+    setPwConfirm('')
+    setPwError('')
+  }
+
+  const handleSetPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setPwError('')
+    if (pwNew !== pwConfirm) {
+      setPwError('Passwords do not match')
+      return
+    }
+    if (!pwNew) {
+      setPwError('Password cannot be empty')
+      return
+    }
+    try {
+      await setPasswordMut.mutateAsync({
+        current_password: bookStatus?.has_password ? pwCurrent : undefined,
+        new_password: pwNew,
+      })
+      closePasswordModal()
+    } catch (err) {
+      setPwError((err as Error).message)
+    }
+  }
+
+  const handleRemovePassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setPwError('')
+    try {
+      await removePasswordMut.mutateAsync({ current_password: pwCurrent })
+      closePasswordModal()
+    } catch (err) {
+      setPwError((err as Error).message)
     }
   }
 
@@ -209,6 +260,133 @@ export default function Accounts() {
           >
             Create your first account
           </button>
+        </div>
+      )}
+
+      {/* Book Password Section */}
+      <div className="mt-8 bg-surface rounded-lg shadow p-4">
+        <h2 className="text-lg font-semibold mb-3">Book Password</h2>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-content-secondary">
+            {bookStatus?.has_password
+              ? 'This book is password-protected.'
+              : 'No password set.'}
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowPasswordModal('set')}
+              className="text-sm px-3 py-1.5 border border-border-strong rounded hover:bg-hover"
+            >
+              {bookStatus?.has_password ? 'Change Password' : 'Set Password'}
+            </button>
+            {bookStatus?.has_password && (
+              <button
+                onClick={() => setShowPasswordModal('remove')}
+                className="text-sm px-3 py-1.5 border border-red-300 text-red-600 rounded hover:bg-red-50 dark:border-red-700 dark:hover:bg-red-900/30"
+              >
+                Remove Password
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Set/Change Password Modal */}
+      {showPasswordModal === 'set' && (
+        <div className="fixed inset-0 bg-overlay flex items-center justify-center p-4 z-50">
+          <div className="bg-surface rounded-lg p-6 max-w-sm w-full">
+            <h2 className="text-xl font-bold mb-4">
+              {bookStatus?.has_password ? 'Change Password' : 'Set Password'}
+            </h2>
+            <form onSubmit={handleSetPassword} className="space-y-4">
+              {bookStatus?.has_password && (
+                <div>
+                  <label className="block text-sm font-medium text-content mb-1">Current Password</label>
+                  <input
+                    type="password"
+                    value={pwCurrent}
+                    onChange={(e) => setPwCurrent(e.target.value)}
+                    className="w-full px-3 py-2 border border-input-border rounded bg-input focus:ring-2 focus:ring-blue-500"
+                    autoFocus
+                  />
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-content mb-1">New Password</label>
+                <input
+                  type="password"
+                  value={pwNew}
+                  onChange={(e) => setPwNew(e.target.value)}
+                  className="w-full px-3 py-2 border border-input-border rounded bg-input focus:ring-2 focus:ring-blue-500"
+                  autoFocus={!bookStatus?.has_password}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-content mb-1">Confirm New Password</label>
+                <input
+                  type="password"
+                  value={pwConfirm}
+                  onChange={(e) => setPwConfirm(e.target.value)}
+                  className="w-full px-3 py-2 border border-input-border rounded bg-input focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              {pwError && <p className="text-red-600 text-sm">{pwError}</p>}
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="submit"
+                  disabled={setPasswordMut.isPending}
+                  className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {setPasswordMut.isPending ? 'Saving...' : 'Save'}
+                </button>
+                <button
+                  type="button"
+                  onClick={closePasswordModal}
+                  className="px-4 py-2 border border-border-strong rounded hover:bg-hover"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Remove Password Modal */}
+      {showPasswordModal === 'remove' && (
+        <div className="fixed inset-0 bg-overlay flex items-center justify-center p-4 z-50">
+          <div className="bg-surface rounded-lg p-6 max-w-sm w-full">
+            <h2 className="text-xl font-bold mb-4">Remove Password</h2>
+            <form onSubmit={handleRemovePassword} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-content mb-1">Current Password</label>
+                <input
+                  type="password"
+                  value={pwCurrent}
+                  onChange={(e) => setPwCurrent(e.target.value)}
+                  className="w-full px-3 py-2 border border-input-border rounded bg-input focus:ring-2 focus:ring-blue-500"
+                  autoFocus
+                />
+              </div>
+              {pwError && <p className="text-red-600 text-sm">{pwError}</p>}
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="submit"
+                  disabled={removePasswordMut.isPending}
+                  className="flex-1 bg-red-600 text-white py-2 rounded hover:bg-red-700 disabled:opacity-50"
+                >
+                  {removePasswordMut.isPending ? 'Removing...' : 'Remove Password'}
+                </button>
+                <button
+                  type="button"
+                  onClick={closePasswordModal}
+                  className="px-4 py-2 border border-border-strong rounded hover:bg-hover"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

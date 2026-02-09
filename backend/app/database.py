@@ -1,3 +1,6 @@
+import hashlib
+import os
+import sqlite3
 from datetime import date
 from pathlib import Path
 from sqlalchemy import create_engine, event, text, inspect
@@ -126,3 +129,48 @@ def get_current_book_path() -> Path | None:
     if url.startswith("sqlite:///"):
         return Path(url[10:])
     return None
+
+
+def hash_password(password: str) -> tuple[str, str]:
+    """Hash a password with a random salt. Returns (hex_hash, hex_salt)."""
+    salt = os.urandom(32)
+    h = hashlib.sha256(salt + password.encode("utf-8")).hexdigest()
+    return h, salt.hex()
+
+
+def verify_password(password: str, salt_hex: str, hash_hex: str) -> bool:
+    """Verify a password against a stored salt and hash."""
+    salt = bytes.fromhex(salt_hex)
+    h = hashlib.sha256(salt + password.encode("utf-8")).hexdigest()
+    return h == hash_hex
+
+
+def check_book_has_password(db_path: Path) -> bool:
+    """Check if a book file has a password set (raw sqlite3, no engine needed)."""
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cursor = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='book_settings'"
+        )
+        if not cursor.fetchone():
+            return False
+        row = conn.execute(
+            "SELECT password_hash FROM book_settings WHERE id = 1"
+        ).fetchone()
+        return row is not None and row[0] is not None
+    finally:
+        conn.close()
+
+
+def verify_book_password(db_path: Path, password: str) -> bool:
+    """Verify a password against a book file's stored hash (raw sqlite3)."""
+    conn = sqlite3.connect(str(db_path))
+    try:
+        row = conn.execute(
+            "SELECT password_hash, password_salt FROM book_settings WHERE id = 1"
+        ).fetchone()
+        if not row or not row[0] or not row[1]:
+            return False
+        return verify_password(password, row[1], row[0])
+    finally:
+        conn.close()

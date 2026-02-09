@@ -9,7 +9,8 @@ from pydantic import BaseModel
 from starlette.background import BackgroundTask
 
 from ..config import load_recent_books, add_recent_book, update_backup_timestamp, get_backup_status, rename_book, get_book_name, RecentBook
-from ..database import open_book, close_book, is_book_open, get_current_book_path
+from ..database import open_book, close_book, is_book_open, get_current_book_path, check_book_has_password, verify_book_password, hash_password, verify_password, get_db
+from ..models import BookSettings
 
 router = APIRouter()
 
@@ -18,6 +19,7 @@ class BookPath(BaseModel):
     """Request body for opening/creating a book."""
     path: str
     name: str | None = None
+    password: str | None = None
 
 
 class BookStatus(BaseModel):
@@ -25,6 +27,7 @@ class BookStatus(BaseModel):
     is_open: bool
     path: str | None = None
     name: str | None = None
+    has_password: bool = False
 
 
 @router.get("/recent", response_model=list[RecentBook])
@@ -40,12 +43,15 @@ def get_book_status():
     """Get current book status."""
     path = get_current_book_path()
     name = None
+    has_pw = False
     if path:
         name = get_book_name(path) or path.stem
+        has_pw = check_book_has_password(path)
     return BookStatus(
         is_open=is_book_open(),
         path=str(path) if path else None,
         name=name,
+        has_password=has_pw,
     )
 
 
@@ -56,13 +62,21 @@ def open_existing_book(book: BookPath):
     if not path.exists():
         raise HTTPException(status_code=404, detail="Book file not found")
 
+    # Check password before opening
+    if check_book_has_password(path):
+        if not book.password:
+            raise HTTPException(status_code=403, detail="Password required")
+        if not verify_book_password(path, book.password):
+            raise HTTPException(status_code=403, detail="Incorrect password")
+
     try:
         open_book(path)
         add_recent_book(path, book.name)
         return BookStatus(
             is_open=True,
             path=str(path),
-            name=book.name or path.stem
+            name=book.name or path.stem,
+            has_password=check_book_has_password(path),
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -233,3 +247,78 @@ def backup_status():
     if not book_path:
         raise HTTPException(status_code=400, detail="No book is open")
     return get_backup_status(book_path)
+
+
+class SetPasswordRequest(BaseModel):
+    current_password: str | None = None
+    new_password: str
+
+
+class RemovePasswordRequest(BaseModel):
+    current_password: str
+
+
+@router.post("/password")
+def set_book_password(req: SetPasswordRequest):
+    """Set or change the book password."""
+    if not is_book_open():
+        raise HTTPException(status_code=400, detail="No book is open")
+
+    db = next(get_db())
+    try:
+        settings = db.query(BookSettings).filter(BookSettings.id == 1).first()
+
+        # If password already set, verify current password
+        if settings and settings.password_hash:
+            if not req.current_password:
+                raise HTTPException(status_code=403, detail="Current password required")
+            if not verify_password(req.current_password, settings.password_salt, settings.password_hash):
+                raise HTTPException(status_code=403, detail="Incorrect current password")
+
+        new_hash, new_salt = hash_password(req.new_password)
+
+        if settings:
+            settings.password_hash = new_hash
+            settings.password_salt = new_salt
+        else:
+            settings = BookSettings(id=1, password_hash=new_hash, password_salt=new_salt)
+            db.add(settings)
+
+        db.commit()
+        return {"message": "Password set"}
+    except HTTPException:
+        raise
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+@router.post("/password/remove")
+def remove_book_password(req: RemovePasswordRequest):
+    """Remove the book password."""
+    if not is_book_open():
+        raise HTTPException(status_code=400, detail="No book is open")
+
+    db = next(get_db())
+    try:
+        settings = db.query(BookSettings).filter(BookSettings.id == 1).first()
+
+        if not settings or not settings.password_hash:
+            raise HTTPException(status_code=400, detail="No password is set")
+
+        if not verify_password(req.current_password, settings.password_salt, settings.password_hash):
+            raise HTTPException(status_code=403, detail="Incorrect password")
+
+        settings.password_hash = None
+        settings.password_salt = None
+        db.commit()
+        return {"message": "Password removed"}
+    except HTTPException:
+        raise
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()

@@ -22,14 +22,40 @@ export default function BookPicker() {
   const [browseLoading, setBrowseLoading] = useState(false)
   const [browseError, setBrowseError] = useState('')
 
+  // Password prompt state
+  const [passwordPrompt, setPasswordPrompt] = useState<{ path: string; name: string } | null>(null)
+  const [password, setPassword] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+
+  const attemptOpen = (path: string, name: string, pw?: string) => {
+    openBook.mutate({ path, name, password: pw }, {
+      onError: (error: Error) => {
+        if (error.message === 'Password required' || error.message === 'Incorrect password') {
+          setPasswordPrompt({ path, name })
+          setPasswordError(error.message === 'Incorrect password' ? 'Incorrect password' : '')
+          setPassword('')
+        }
+      }
+    })
+  }
+
   const handleOpen = (path: string, name: string) => {
-    openBook.mutate({ path, name })
+    attemptOpen(path, name)
   }
 
   const handleOpenExisting = (e: React.FormEvent) => {
     e.preventDefault()
     if (!newPath) return
-    openBook.mutate({ path: newPath })
+    attemptOpen(newPath, newName)
+  }
+
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!passwordPrompt || !password) return
+    attemptOpen(passwordPrompt.path, passwordPrompt.name, password)
+    setPasswordPrompt(null)
+    setPassword('')
+    setPasswordError('')
   }
 
   const handleCreate = (e: React.FormEvent) => {
@@ -224,12 +250,52 @@ export default function BookPicker() {
           </div>
         )}
 
-        {openBook.isError && (
+        {openBook.isError && !passwordPrompt && (
           <p className="mt-4 text-red-600 text-sm">
             {(openBook.error as Error).message}
           </p>
         )}
       </div>
+
+      {/* Password Prompt Modal */}
+      {passwordPrompt && (
+        <div className="fixed inset-0 bg-overlay flex items-center justify-center p-4 z-50">
+          <div className="bg-surface rounded-lg shadow-lg max-w-sm w-full p-6">
+            <h3 className="text-lg font-semibold text-content mb-4">Password Required</h3>
+            <form onSubmit={handlePasswordSubmit} className="space-y-4">
+              <div>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => { setPassword(e.target.value); setPasswordError('') }}
+                  placeholder="Enter book password"
+                  className="w-full px-3 py-2 border border-input-border rounded bg-input focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  autoFocus
+                />
+                {passwordError && (
+                  <p className="mt-1 text-red-600 text-sm">{passwordError}</p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={openBook.isPending || !password}
+                  className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {openBook.isPending ? 'Opening...' : 'Unlock'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setPasswordPrompt(null); setPassword(''); setPasswordError('') }}
+                  className="px-4 py-2 border border-border-strong rounded hover:bg-hover"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* File Browser Modal */}
       {showBrowser && (

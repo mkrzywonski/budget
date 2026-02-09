@@ -19,7 +19,7 @@ export function useOpenBook() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (data: { path: string; name?: string }) =>
+    mutationFn: (data: { path: string; name?: string; password?: string }) =>
       api.post<BookStatus>('/books/open', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bookStatus'] })
@@ -118,6 +118,30 @@ export function useRestoreBook() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries()
+    }
+  })
+}
+
+export function useSetPassword() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: { current_password?: string; new_password: string }) =>
+      api.post('/books/password', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bookStatus'] })
+    }
+  })
+}
+
+export function useRemovePassword() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: { current_password: string }) =>
+      api.post('/books/password/remove', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bookStatus'] })
     }
   })
 }

@@ -200,6 +200,7 @@ export interface BookStatus {
   is_open: boolean
   path: string | null
   name: string | null
+  has_password: boolean
 }
 
 export interface RecentBook {

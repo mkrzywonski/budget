@@ -8,6 +8,7 @@ from .import_profile import ImportProfile
 from .payee import Payee
 from .forecast_dismissal import ForecastDismissal
 from .budget import Budget, BudgetItem, BudgetAccount
+from .book_settings import BookSettings
 
 __all__ = [
     "Base",
@@ -27,4 +28,5 @@ __all__ = [
     "Budget",
     "BudgetItem",
     "BudgetAccount",
+    "BookSettings",
 ]
