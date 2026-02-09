@@ -13,3 +13,6 @@ ofxparse>=0.21  # QFX/OFX parsing
 
 # File uploads
 python-multipart>=0.0.7
+
+# Utilities
+qrcode>=7.4.0  # QR code in terminal on startup
