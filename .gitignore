@@ -39,3 +39,7 @@ Thumbs.db
 
 # Config (contains local paths)
 .config/
+
+# Nix
+flake.nix
+flake.lock

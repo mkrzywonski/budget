@@ -121,7 +121,7 @@ export default function BookPicker() {
                   key={book.path}
                   onClick={() => handleOpen(book.path, book.name)}
                   disabled={openBook.isPending}
-                  className="w-full text-left px-4 py-3 rounded border border-border hover:border-blue-500 hover:bg-blue-50 transition-colors"
+                  className="w-full text-left px-4 py-3 rounded border border-border hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
                 >
                   <div className="font-medium text-content">{book.name}</div>
                   <div className="text-sm text-content-secondary truncate">{book.path}</div>
