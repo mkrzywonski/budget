@@ -266,7 +266,7 @@ class CSVParser:
             return credit - debit
         else:
             # Single amount column
-            amount_col = config.get("column", 1)
+            amount_col = config.get("column") or 1
             amount_str = row[amount_col].strip() if amount_col < len(row) else "0"
             amount = self._parse_amount_string(amount_str)
 

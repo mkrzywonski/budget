@@ -127,7 +127,7 @@ export default function ImportModal({
     // Use detected mappings if available
     if (result.detected_mappings) {
       setMappings(result.detected_mappings)
-      if (result.detected_mappings.amount !== undefined) {
+      if (result.detected_mappings.amount != null) {
         setAmountConfig({
           type: 'single',
           column: result.detected_mappings.amount,
@@ -158,7 +158,7 @@ export default function ImportModal({
     setPreview(result)
     if (result.detected_mappings) {
       setMappings(result.detected_mappings)
-      if (result.detected_mappings.amount !== undefined) {
+      if (result.detected_mappings.amount != null) {
         setAmountConfig({
           type: 'single',
           column: result.detected_mappings.amount,
@@ -367,13 +367,20 @@ export default function ImportModal({
           </div>
           <div className="flex gap-2">
             {step === 'upload' && (
-              <button
-                onClick={handlePreview}
-                disabled={!fileContent || previewMutation.isPending || previewOFXMutation.isPending}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-              >
-                {previewMutation.isPending || previewOFXMutation.isPending ? 'Processing...' : 'Continue'}
-              </button>
+              <>
+                {(previewMutation.isError || previewOFXMutation.isError) && (
+                  <p className="text-red-600 text-sm mr-4">
+                    {((previewMutation.error || previewOFXMutation.error) as Error)?.message || 'Failed to parse file'}
+                  </p>
+                )}
+                <button
+                  onClick={handlePreview}
+                  disabled={!fileContent || previewMutation.isPending || previewOFXMutation.isPending}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {previewMutation.isPending || previewOFXMutation.isPending ? 'Processing...' : 'Continue'}
+                </button>
+              </>
             )}
             {step === 'mapping' && (
               <button

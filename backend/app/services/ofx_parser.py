@@ -14,6 +14,30 @@ from ofxparse import OfxParser
 from .csv_parser import ParsedTransaction, CSVParseResult
 
 
+def _normalize_ofx_content(content: str) -> str:
+    """
+    Normalize OFX/QFX content to handle files where the header is on a single line.
+
+    Some banks (e.g. Wells Fargo) export QFX files with no newlines between
+    header fields, which causes ofxparse to fail with 'too many values to unpack'.
+    """
+    ofx_start = content.find('<OFX>')
+    if ofx_start == -1:
+        ofx_start = content.find('<ofx>')
+
+    if ofx_start <= 0 or '\n' in content[:ofx_start]:
+        return content  # No header to fix, or already has newlines
+
+    header = content[:ofx_start]
+    body = content[ofx_start:]
+
+    for key in ['DATA:', 'VERSION:', 'SECURITY:', 'ENCODING:', 'CHARSET:',
+                'COMPRESSION:', 'OLDFILEUID:', 'NEWFILEUID:']:
+        header = header.replace(key, '\n' + key)
+
+    return header.strip() + '\n' + body
+
+
 def parse_ofx_file(content: str) -> CSVParseResult:
     """
     Parse OFX/QFX file content and return a CSVParseResult.
@@ -21,7 +45,7 @@ def parse_ofx_file(content: str) -> CSVParseResult:
     OFX files have a fixed structure, so no column mapping is needed.
     """
     try:
-        ofx = OfxParser.parse(BytesIO(content.encode('latin-1')))
+        ofx = OfxParser.parse(BytesIO(_normalize_ofx_content(content).encode('latin-1')))
     except Exception as e:
         return CSVParseResult(
             headers=[],
