@@ -189,13 +189,36 @@ def create_transaction(
     if transaction.transfer_to_account_id:
         return _create_transfer(transaction, db)
 
-    db_transaction = Transaction(**transaction.model_dump(exclude={"transfer_to_account_id"}))
+    if transaction.transfer_to_external:
+        return _create_external_transfer(transaction, db)
+
+    db_transaction = Transaction(**transaction.model_dump(exclude={"transfer_to_account_id", "transfer_to_external"}))
     db.add(db_transaction)
     db.flush()
     apply_payee_match(db, db_transaction)
     db.flush()
     db.refresh(db_transaction)
     return db_transaction
+
+
+def _create_external_transfer(transaction: TransactionCreate, db: Session) -> Transaction:
+    """Create a transfer to/from an untracked external account (single transaction, no counterpart)."""
+    name = transaction.transfer_to_external
+    label = f"Transfer to {name}"
+    tx = Transaction(
+        account_id=transaction.account_id,
+        posted_date=transaction.posted_date,
+        amount_cents=-abs(transaction.amount_cents),
+        payee_normalized=label,
+        display_name=label,
+        memo=transaction.memo,
+        transaction_type=TransactionType.TRANSFER,
+        source=transaction.source,
+    )
+    db.add(tx)
+    db.flush()
+    db.refresh(tx)
+    return tx
 
 
 def _create_transfer(transaction: TransactionCreate, db: Session) -> Transaction:
@@ -251,13 +274,35 @@ def convert_to_transfer(
     request: ConvertToTransferRequest,
     db: Session = Depends(get_db)
 ):
-    """Convert a regular transaction into a transfer with a linked counterpart."""
+    """Convert a regular transaction into a transfer."""
     tx = db.query(Transaction).filter(Transaction.id == transaction_id).first()
     if not tx:
         raise HTTPException(status_code=404, detail="Transaction not found")
     if tx.transaction_type == TransactionType.TRANSFER:
         raise HTTPException(status_code=400, detail="Transaction is already a transfer")
 
+    if not request.target_account_id and not request.external_account_name:
+        raise HTTPException(status_code=400, detail="Either target_account_id or external_account_name is required")
+
+    # Determine direction from the original amount sign
+    # Negative = outflow (money left this account → "Transfer to")
+    # Positive = inflow (money came into this account → "Transfer from")
+    is_outflow = tx.amount_cents < 0
+
+    # External transfer: single transaction, no counterpart
+    if request.external_account_name:
+        name = request.external_account_name
+        label = f"Transfer {'to' if is_outflow else 'from'} {name}"
+        tx.transaction_type = TransactionType.TRANSFER
+        tx.payee_raw = None
+        tx.category_id = None
+        tx.payee_normalized = label
+        tx.display_name = label
+        db.flush()
+        db.refresh(tx)
+        return tx
+
+    # Internal transfer: create linked counterpart in target account
     target_account = db.query(Account).filter(Account.id == request.target_account_id).first()
     if not target_account:
         raise HTTPException(status_code=404, detail="Target account not found")
@@ -270,11 +315,6 @@ def convert_to_transfer(
         if match_tx:
             db.delete(match_tx)
             db.flush()
-
-    # Determine direction from the original amount sign
-    # Negative = outflow (money left this account → "Transfer to")
-    # Positive = inflow (money came into this account → "Transfer from")
-    is_outflow = tx.amount_cents < 0
 
     tx.transaction_type = TransactionType.TRANSFER
     tx.payee_raw = None

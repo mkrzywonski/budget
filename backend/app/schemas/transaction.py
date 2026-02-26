@@ -22,7 +22,8 @@ class TransactionCreate(TransactionBase):
     account_id: int
     transaction_type: TransactionType = TransactionType.ACTUAL
     source: TransactionSource = TransactionSource.MANUAL
-    transfer_to_account_id: int | None = None  # For transfer transactions
+    transfer_to_account_id: int | None = None  # For transfer to tracked account
+    transfer_to_external: str | None = None  # For transfer to untracked account
 
 
 class TransactionUpdate(BaseModel):
@@ -40,7 +41,8 @@ class TransactionUpdate(BaseModel):
 
 class ConvertToTransferRequest(BaseModel):
     """Request to convert a regular transaction into a transfer."""
-    target_account_id: int
+    target_account_id: int | None = None  # Tracked account (internal transfer)
+    external_account_name: str | None = None  # Untracked account name (external transfer)
     delete_match_id: int | None = None
 
 

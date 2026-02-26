@@ -232,6 +232,7 @@ export default function Ledger() {
     type: TxType
     category_id: number | null
     transfer_to_account_id?: number
+    transfer_to_external?: string
     delete_match_id?: number
   }) => {
     setLastType(data.type)
@@ -243,12 +244,18 @@ export default function Ledger() {
       memo: data.memo || undefined,
       category_id: data.type !== 'transfer' ? (data.category_id ?? undefined) : undefined,
       transfer_to_account_id: data.transfer_to_account_id,
+      transfer_to_external: data.transfer_to_external,
       delete_match_id: data.delete_match_id
     })
   }
 
-  const handleConvertToTransfer = async (txId: number, targetAccountId: number, deleteMatchId?: number) => {
-    await convertToTransferMutation.mutateAsync({ id: txId, target_account_id: targetAccountId, delete_match_id: deleteMatchId })
+  const handleConvertToTransfer = async (txId: number, data: { targetAccountId?: number; externalAccountName?: string; deleteMatchId?: number }) => {
+    await convertToTransferMutation.mutateAsync({
+      id: txId,
+      target_account_id: data.targetAccountId,
+      external_account_name: data.externalAccountName,
+      delete_match_id: data.deleteMatchId
+    })
     setEditingId(null)
   }
 
@@ -420,7 +427,7 @@ export default function Ledger() {
                     currentAccountId={id}
                     showBalance={showBalance}
                     onSave={(data) => handleUpdate(tx.id, data)}
-                    onConvertToTransfer={(targetAccountId, deleteMatchId) => handleConvertToTransfer(tx.id, targetAccountId, deleteMatchId)}
+                    onConvertToTransfer={(data) => handleConvertToTransfer(tx.id, data)}
                     onCancel={() => setEditingId(null)}
                   />
                 ) : (
@@ -736,7 +743,7 @@ interface EditRowProps {
     memo: string
     category_id: number | null
   }) => void
-  onConvertToTransfer: (targetAccountId: number, deleteMatchId?: number) => void
+  onConvertToTransfer: (data: { targetAccountId?: number; externalAccountName?: string; deleteMatchId?: number }) => void
   onCancel: () => void
 }
 
@@ -750,7 +757,8 @@ function EditRow({ transaction: tx, categories, accounts, currentAccountId, show
     (Math.abs(tx.amount_cents) / 100).toFixed(2)
   )
   const [categoryId, setCategoryId] = useState<number | null>(tx.category_id)
-  const [transferAccountId, setTransferAccountId] = useState<number | null>(null)
+  const [transferAccountId, setTransferAccountId] = useState<number | 'external' | null>(null)
+  const [externalAccountName, setExternalAccountName] = useState('')
   const [transferMatch, setTransferMatch] = useState<TransferMatch | null>(null)
   const [deleteMatchId, setDeleteMatchId] = useState<number | null>(null)
   const findMatch = useFindTransferMatch()
@@ -763,7 +771,7 @@ function EditRow({ transaction: tx, categories, accounts, currentAccountId, show
 
   // Search for matching transactions in target account when converting to transfer
   useEffect(() => {
-    if (type !== 'transfer' || isExistingTransfer || !transferAccountId) {
+    if (type !== 'transfer' || isExistingTransfer || !transferAccountId || transferAccountId === 'external') {
       setTransferMatch(null)
       setDeleteMatchId(null)
       return
@@ -787,8 +795,13 @@ function EditRow({ transaction: tx, categories, accounts, currentAccountId, show
   const doSave = () => {
     // Converting a non-transfer to transfer
     if (type === 'transfer' && !isExistingTransfer) {
-      if (!transferAccountId) return
-      onConvertToTransfer(transferAccountId, deleteMatchId ?? undefined)
+      if (transferAccountId === 'external') {
+        if (!externalAccountName.trim()) return
+        onConvertToTransfer({ externalAccountName: externalAccountName.trim() })
+      } else {
+        if (!transferAccountId) return
+        onConvertToTransfer({ targetAccountId: transferAccountId, deleteMatchId: deleteMatchId ?? undefined })
+      }
       return
     }
     const cents = parseCurrency(amount)
@@ -839,18 +852,36 @@ function EditRow({ transaction: tx, categories, accounts, currentAccountId, show
             {tx.display_name || tx.payee_normalized || 'Transfer'}
           </span>
         ) : type === 'transfer' ? (
-          <div className="flex items-center gap-1">
-            <span className="text-xs text-purple-600 font-medium whitespace-nowrap">{directionLabel}</span>
-            <select
-              value={transferAccountId ?? ''}
-              onChange={(e) => setTransferAccountId(e.target.value ? Number(e.target.value) : null)}
-              className="flex-1 px-1 py-1 text-sm border border-input-border rounded bg-input"
-            >
-              <option value="">Select account...</option>
-              {otherAccounts.map(a => (
-                <option key={a.id} value={a.id}>{a.name}</option>
-              ))}
-            </select>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-purple-600 font-medium whitespace-nowrap">{directionLabel}</span>
+              <select
+                value={transferAccountId ?? ''}
+                onChange={(e) => {
+                  const val = e.target.value
+                  if (val === 'external') { setTransferAccountId('external'); setExternalAccountName('') }
+                  else { setTransferAccountId(val ? Number(val) : null); setExternalAccountName('') }
+                }}
+                className="flex-1 px-1 py-1 text-sm border border-input-border rounded bg-input"
+              >
+                <option value="">Select account...</option>
+                {otherAccounts.map(a => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+                <option value="external">External Account...</option>
+              </select>
+            </div>
+            {transferAccountId === 'external' && (
+              <input
+                type="text"
+                value={externalAccountName}
+                onChange={(e) => setExternalAccountName(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Account name"
+                className="w-full px-2 py-1 text-sm border border-input-border rounded bg-input placeholder-content-tertiary"
+                autoFocus
+              />
+            )}
           </div>
         ) : (
           <input
@@ -1002,6 +1033,7 @@ interface EntryRowProps {
     type: TxType
     category_id: number | null
     transfer_to_account_id?: number
+    transfer_to_external?: string
     delete_match_id?: number
   }) => Promise<void>
   isPending: boolean
@@ -1034,7 +1066,8 @@ function EntryRow({
   const dateRef = useRef<HTMLInputElement>(null)
 
   // Transfer-specific state
-  const [transferAccountId, setTransferAccountId] = useState<number | null>(null)
+  const [transferAccountId, setTransferAccountId] = useState<number | 'external' | null>(null)
+  const [externalAccountName, setExternalAccountName] = useState('')
   const [transferMatch, setTransferMatch] = useState<TransferMatch | null>(null)
   const [deleteMatchId, setDeleteMatchId] = useState<number | null>(null)
   const findMatch = useFindTransferMatch()
@@ -1054,6 +1087,7 @@ function EntryRow({
     prevType.current = type
     if (type !== 'transfer') {
       setTransferAccountId(null)
+      setExternalAccountName('')
       setTransferMatch(null)
       setDeleteMatchId(null)
     }
@@ -1061,7 +1095,7 @@ function EntryRow({
 
   // Search for matching transactions in target account
   useEffect(() => {
-    if (type !== 'transfer' || !transferAccountId || !amount) {
+    if (type !== 'transfer' || !transferAccountId || transferAccountId === 'external' || !amount) {
       setTransferMatch(null)
       setDeleteMatchId(null)
       return
@@ -1082,7 +1116,9 @@ function EntryRow({
     })
   }, [type, transferAccountId, amount, date])
 
-  const isEmpty = type === 'transfer' ? !transferAccountId || !amount : !payee && !amount
+  const isEmpty = type === 'transfer'
+    ? !transferAccountId || !amount || (transferAccountId === 'external' && !externalAccountName.trim())
+    : !payee && !amount
 
   const filteredSuggestions = useMemo(() => {
     if (!payee.trim()) return []
@@ -1103,7 +1139,9 @@ function EntryRow({
   const handleSubmit = async () => {
     if (!amount) return
     if (type === 'transfer' && !transferAccountId) return
+    if (type === 'transfer' && transferAccountId === 'external' && !externalAccountName.trim()) return
 
+    const isExternal = type === 'transfer' && transferAccountId === 'external'
     await onSubmit({
       posted_date: date,
       amount_cents: parseCurrency(amount),
@@ -1111,7 +1149,8 @@ function EntryRow({
       memo,
       type,
       category_id: categoryId,
-      transfer_to_account_id: type === 'transfer' ? transferAccountId! : undefined,
+      transfer_to_account_id: type === 'transfer' && !isExternal ? (transferAccountId as number) : undefined,
+      transfer_to_external: isExternal ? externalAccountName.trim() : undefined,
       delete_match_id: type === 'transfer' && deleteMatchId ? deleteMatchId : undefined
     })
 
@@ -1121,6 +1160,7 @@ function EntryRow({
     setAmount('')
     setCategoryId(null)
     setTransferAccountId(null)
+    setExternalAccountName('')
     setTransferMatch(null)
     setDeleteMatchId(null)
     dateRef.current?.focus()
@@ -1194,19 +1234,37 @@ function EntryRow({
       </td>
       <td className="px-4 py-1.5">
         {type === 'transfer' ? (
-          <div className="flex items-center gap-1">
-            <span className="text-xs text-purple-600 font-medium whitespace-nowrap">Transfer to</span>
-            <select
-              value={transferAccountId ?? ''}
-              onChange={(e) => setTransferAccountId(e.target.value ? Number(e.target.value) : null)}
-              onKeyDown={handleKeyDown}
-              className="flex-1 px-1 py-1 text-sm border border-input-border rounded bg-input"
-            >
-              <option value="">Select account...</option>
-              {otherAccounts.map(a => (
-                <option key={a.id} value={a.id}>{a.name}</option>
-              ))}
-            </select>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-purple-600 font-medium whitespace-nowrap">Transfer to</span>
+              <select
+                value={transferAccountId ?? ''}
+                onChange={(e) => {
+                  const val = e.target.value
+                  if (val === 'external') { setTransferAccountId('external'); setExternalAccountName('') }
+                  else { setTransferAccountId(val ? Number(val) : null); setExternalAccountName('') }
+                }}
+                onKeyDown={handleKeyDown}
+                className="flex-1 px-1 py-1 text-sm border border-input-border rounded bg-input"
+              >
+                <option value="">Select account...</option>
+                {otherAccounts.map(a => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+                <option value="external">External Account...</option>
+              </select>
+            </div>
+            {transferAccountId === 'external' && (
+              <input
+                type="text"
+                value={externalAccountName}
+                onChange={(e) => setExternalAccountName(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Account name"
+                className="w-full px-2 py-1 text-sm border border-input-border rounded bg-input placeholder-content-tertiary"
+                autoFocus
+              />
+            )}
           </div>
         ) : (
           <div className="relative">

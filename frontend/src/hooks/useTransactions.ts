@@ -44,6 +44,7 @@ export function useCreateTransaction() {
       memo?: string
       category_id?: number
       transfer_to_account_id?: number
+      transfer_to_external?: string
       delete_match_id?: number
     }) => {
       const { delete_match_id, ...body } = data
@@ -126,8 +127,13 @@ export function useConvertToTransfer() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ id, target_account_id, delete_match_id }: { id: number; target_account_id: number; delete_match_id?: number }) =>
-      api.post<Transaction>(`/transactions/${id}/convert-to-transfer`, { target_account_id, delete_match_id }),
+    mutationFn: ({ id, target_account_id, external_account_name, delete_match_id }: {
+      id: number
+      target_account_id?: number
+      external_account_name?: string
+      delete_match_id?: number
+    }) =>
+      api.post<Transaction>(`/transactions/${id}/convert-to-transfer`, { target_account_id, external_account_name, delete_match_id }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
     }
